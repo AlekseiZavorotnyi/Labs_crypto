@@ -2,8 +2,66 @@
 #include "Interfaces.h"
 #include <vector>
 
-class DES : public IEncryptionRound, IKeyExpansion{
+class Feistel_network : public ISymmetricCipher{
+private:
+    IKeyExpansion* key;
+    IEncryptionRound* F;
+    mass_mass_b roundKeys_;
+    bool were_keysSetup = false;
+
+    mass_b en_de_crypt(mass_b& block, bool encrypt) {
+        if (!were_keysSetup){
+            throw std::runtime_error("Keys not setup. Call setupKeys() first.");
+        }
+        size_t n = block.size();
+        if (n % 2 != 0) {
+            throw std::invalid_argument("Block size must be even");
+        }
+        auto keys = roundKeys_;
+        if (!encrypt){
+            std::reverse(keys.begin(), keys.end());
+        }
+        mass_b L_prev(block.begin(), block.begin() + n / 2), R_prev(block.begin() + n / 2, block.end());
+        for (auto K_cur : keys){
+            mass_b temp = R_prev;
+            mass_b res_F = F->encryptRound(R_prev, K_cur);
+            for (size_t j = 0; j < n; j++){
+                R_prev[j] =  L_prev[j] ^ res_F[j];
+            }
+            L_prev = temp;
+        }
+        mass_b res = R_prev;
+        res.insert(res.end(), L_prev.begin(), L_prev.end());
+        return res;
+    }
 public:
+    Feistel_network(IKeyExpansion* key_expansion,
+                    IEncryptionRound* round_function)
+            : key(key_expansion)
+            , F(round_function) {}
+
+    mass_b encrypt(mass_b& block) override {
+        return en_de_crypt(block, true);
+    }
+
+    mass_b decrypt(mass_b& block) override {
+        return en_de_crypt(block, false);
+    }
+
+    void setupKeys(mass_b& en_de_crypt_key) override{
+        were_keysSetup = true;
+        roundKeys_ = key->key_extension(en_de_crypt_key);
+    }
+
+    ~Feistel_network() = default;
+};
+
+class DES : public IEncryptionRound, public IKeyExpansion{
+public:
+    DES() = default;
+
+    DES(BitOrder order) : bit_order(order) {}
+
     mass_b encryptRound(mass_b& inputBlock, mass_b& roundKey) override {
 
         mass_b expanded = applyE(inputBlock);
@@ -36,16 +94,15 @@ public:
         };
         mass_b res_PC1 = P_block(input_key, PC1, bit_order, StartIndex::ONE);
         std::bitset<56> res_PC1_bits = bytesToBitset<56>(res_PC1);
-        std::pair<std::bitset<28>, std::bitset<28>> C_D = splitBitset<56, 28>(res_PC1_bits);
-        std::bitset<28> C = C_D.first, D = C_D.second;
+        auto [C, D] = splitBitset<56, 28>(res_PC1_bits);
         for (int i = 1; i <= 16; i++){
             if (i == 1 || i == 2 || i == 9 || i == 16){
-                C << 1;
-                D << 1;
+                C = (C << 1) | (C >> 27);
+                D = (D << 1) | (D >> 27);
             }
             else{
-                C << 2;
-                D << 2;
+                C = (C << 2) | (C >> 26);
+                D = (D << 2) | (D >> 26);
             }
             std::bitset<56> comb_C_D = combineBitsets<28, 28>(C, D);
             RES_KEYS[i - 1] = P_block(bitsetToBytes<56>(comb_C_D), PC2, bit_order, StartIndex::ONE);
@@ -58,6 +115,7 @@ public:
     }
 
 private:
+
     BitOrder bit_order = BitOrder::BIG_ENDIAN;
 
     mass_b applyE(mass_b& inputBlock){
@@ -304,53 +362,3 @@ private:
 
 };
 
-
-class Feistel_network : public ISymmetricCipher{
-private:
-    std::unique_ptr<IKeyExpansion> key;
-    std::unique_ptr<IEncryptionRound> F;
-    mass_mass_b roundKeys_;
-    bool were_keysSetup = false;
-
-    mass_b en_de_crypt(mass_b& block, bool encrypt) {
-        if (!were_keysSetup){
-            throw std::runtime_error("Keys not setup. Call setupKeys() first.");
-        }
-        size_t n = block.size();
-        if (n % 2 != 0) {
-            throw std::invalid_argument("Block size must be even");
-        }
-        auto keys = roundKeys_;
-        if (!encrypt){
-            std::reverse(keys.begin(), keys.end());
-        }
-        mass_b L_prev(block.begin(), block.begin() + n / 2), R_prev(block.begin() + n / 2, block.end());
-        for (auto K_cur : keys){
-            mass_b temp = R_prev;
-            mass_b res_F = F->encryptRound(R_prev, K_cur);
-            for (size_t j = 0; j < n; j++){
-                R_prev[j] =  L_prev[j] ^ res_F[j];
-            }
-            L_prev = temp;
-        }
-        mass_b res = R_prev;
-        res.insert(res.end(), L_prev.begin(), L_prev.end());
-        return res;
-    }
-public:
-    Feistel_network(std::unique_ptr<IKeyExpansion> Key, std::unique_ptr<IEncryptionRound> F) :
-        key(std::move(Key)), F(std::move(F)){}
-
-    mass_b encrypt(mass_b& block) override {
-        return en_de_crypt(block, true);
-    }
-
-    mass_b decrypt(mass_b& block) override {
-        return en_de_crypt(block, false);
-    }
-
-    void setupKeys(mass_b& en_de_crypt_key) override{
-        were_keysSetup = true;
-        roundKeys_ = key->key_extension(en_de_crypt_key);
-    }
-};
