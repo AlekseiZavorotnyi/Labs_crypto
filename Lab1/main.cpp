@@ -27,13 +27,10 @@ void printHex(const string& label, const mass_b& data) {
 }
 
 int main() {
-    cout << "=== SIMPLE DES TEST ===" << endl;
 
     try {
 
-        auto des_cipher = std::make_unique<DES>();
-
-        Feistel_network des(des_cipher.get(), des_cipher.get());
+        auto des = std::make_unique<DES>();
 
         // 2. Тестовые данные
         mass_b original = {byte{0x01}, byte{0x23}, byte{0x45}, byte{0x67},
@@ -45,17 +42,16 @@ int main() {
         printHex("Original text", original);
         printHex("Key", key);
 
-        // 3. Настраиваем ключи
-        des.setupKeys(key);
+        des->setupKeys(key);
 
         // 4. Шифруем
         cout << "\n2. Encrypting..." << endl;
-        mass_b encrypted = des.encrypt(original);
+        mass_b encrypted = des->encrypt(original);
         printHex("Encrypted text", encrypted);
 
         // 5. Проверяем, что шифрование изменило данные
         if (areEqual(original, encrypted)) {
-            cout << "Error: Encrypte didn`t do anything!" << endl;
+            cout << "Error: Encryption didn`t do anything!" << endl;
             return 1;
         } else {
             cout << "Encrypted successfully" << endl;
@@ -63,7 +59,7 @@ int main() {
 
         // 6. Дешифруем
         cout << "\n3. Decrypting..." << endl;
-        mass_b decrypted = des.decrypt(encrypted);
+        mass_b decrypted = des->decrypt(encrypted);
         printHex("Decrypted text", decrypted);
 
         // 7. Сравниваем оригинал и результат дешифрования
