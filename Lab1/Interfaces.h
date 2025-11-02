@@ -17,7 +17,7 @@ using mass_b = std::vector<byte>;
 using mass_i = std::vector<int>;
 using mass_mass_mass_i = std::vector<std::vector<std::vector<int>>>;
 
-enum class BitOrder {
+enum class ByteOrder {
     BIG_ENDIAN,
     LITTLE_ENDIAN
 };
