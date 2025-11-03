@@ -48,79 +48,66 @@ bool Comparing(mass_b original, mass_b decrypted){
     return true;
 }
 
-int main() {
-
+bool test(auto& alg, mass_b& original, mass_b& key){
     try {
 
-        //auto des = std::make_unique<DES>();
-        auto deal = std::make_unique<DEAL>();
-
-        // 2. Тестовые данные
-        mass_b original_des = {byte{0x01}, byte{0x23}, byte{0x45}, byte{0x67},
-                           byte{0x89}, byte{0xAB}, byte{0xCD}, byte{0xEF}};
-        mass_b key_des = {byte{0x13}, byte{0x34}, byte{0x57}, byte{0x79},
-                      byte{0x9B}, byte{0xBC}, byte{0xDF}, byte{0xF1}};
-
-        mass_b original_deal = {
-                byte{0x00}, byte{0x11}, byte{0x22}, byte{0x33},
-                byte{0x44}, byte{0x55}, byte{0x66}, byte{0x77},
-                byte{0x88}, byte{0x99}, byte{0xAA}, byte{0xBB},
-                byte{0xCC}, byte{0xDD}, byte{0xEE}, byte{0xFF}
-        };
-
-        mass_b key_deal = {
-                byte{0x01}, byte{0x23}, byte{0x45}, byte{0x67},
-                byte{0x89}, byte{0xAB}, byte{0xCD}, byte{0xEF},
-                byte{0xFE}, byte{0xDC}, byte{0xBA}, byte{0x98},
-                byte{0x76}, byte{0x54}, byte{0x32}, byte{0x10}
-        };
-
         cout << "\n1. Start data:" << endl;
-        //printHex("original_des text", original_des);
-        printHex("original_deal text", original_deal);
-        //printHex("Key des", key_des);
-        printHex("Key deal", key_deal);
+        printHex("original text", original);
+        printHex("Key", key);
 
-        //des->setupKeys(key_des);
-        deal->setupKeys(key_deal);
+
+        alg->setupKeys(key);
 
         // 4. Шифруем
         cout << "\n2. Encrypting..." << endl;
-        //mass_b encrypted_des = des->encrypt(original_des);
-        //printHex("Encrypted DES text", encrypted_des);
-        mass_b encrypted_deal = deal->encrypt(original_deal);
-        printHex("Encrypted DEAL text", encrypted_deal);
+        mass_b encrypted = alg->encrypt(original);
+        printHex("Encrypted text", encrypted);
 
         // 5. Проверяем, что шифрование изменило данные
-        /*if (areEqual(original_des, encrypted_des)) {
-            cout << "Error: Encryption DES didn`t do anything!" << endl;
-            return 1;
+        if (areEqual(original, encrypted)) {
+            cout << "Error: Encryption didn`t do anything!" << endl;
+            return false;
         } else {
-            cout << "Encrypted DES successfully" << endl << endl;
-        }*/
-
-        if (areEqual(original_deal, encrypted_deal)) {
-            cout << "Error: Encryption DEAL didn`t do anything!" << endl;
-            return 1;
-        } else {
-            cout << "Encrypted DEAL successfully" << endl;
+            cout << "Encrypted successfully" << endl << endl;
         }
 
         // 6. Дешифруем
         cout << "\n3. Decrypting..." << endl;
-        //mass_b decrypted_des = des->decrypt(encrypted_des);
-        mass_b decrypted_deal = deal->decrypt(encrypted_deal);
-        //printHex("Decrypted DES text", decrypted_des);
-        printHex("Decrypted DEAL text", decrypted_deal);
+        mass_b decrypted = alg->decrypt(encrypted);
+        printHex("Decrypted text", decrypted);
 
         // 7. Сравниваем оригинал и результат дешифрования
         cout << "\n4. Compare res:" << endl;
-        //Comparing(original_des, decrypted_des);
-        Comparing(original_deal, decrypted_deal);
+        Comparing(original, decrypted);
 
     } catch (const exception& e) {
         cout << "Error: " << e.what() << endl;
-        return 1;
+        return false;
     }
+    return true;
+}
+
+int main() {
+    auto des = std::make_unique<DES>();
+    auto deal = std::make_unique<DEAL>();
+    mass_b original_des = {byte{0x01}, byte{0x23}, byte{0x45}, byte{0x67},
+                           byte{0x89}, byte{0xAB}, byte{0xCD}, byte{0xEF}};
+    mass_b key_des = {byte{0x13}, byte{0x34}, byte{0x57}, byte{0x79},
+                      byte{0x9B}, byte{0xBC}, byte{0xDF}, byte{0xF1}};
+    mass_b original_deal = {
+            byte{0x00}, byte{0x11}, byte{0x22}, byte{0x33},
+            byte{0x44}, byte{0x55}, byte{0x66}, byte{0x77},
+            byte{0x88}, byte{0x99}, byte{0xAA}, byte{0xBB},
+            byte{0xCC}, byte{0xDD}, byte{0xEE}, byte{0xFF}
+    };
+
+    mass_b key_deal = {
+            byte{0x01}, byte{0x23}, byte{0x45}, byte{0x67},
+            byte{0x89}, byte{0xAB}, byte{0xCD}, byte{0xEF},
+            byte{0xFE}, byte{0xDC}, byte{0xBA}, byte{0x98},
+            byte{0x76}, byte{0x54}, byte{0x32}, byte{0x10}
+    };
+    test(des, original_des, key_des);
+    test(deal, original_deal, key_deal);
     return 0;
 }
