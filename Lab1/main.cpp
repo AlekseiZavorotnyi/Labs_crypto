@@ -2,14 +2,13 @@
 #include <iomanip>
 #include <vector>
 #include <memory>
-#include "Feistel_network.cpp"
+//#include "Feistel_network.cpp"
+#include "Encryption_Modes.cpp"
 
 using namespace std;
 
-bool areEqual(const mass_b& a, const mass_b& b) {
-    if (a.size() != b.size()) return false;
-
-    for (size_t i = 0; i < a.size(); i++) {
+bool areEqual(const uint8_t* a, const uint8_t* b, size_t size) {
+    for (size_t i = 0; i < size; i++) {
         if (a[i] != b[i]) {
             return false;
         }
@@ -17,68 +16,52 @@ bool areEqual(const mass_b& a, const mass_b& b) {
     return true;
 }
 
-void printHex(const string& label, const mass_b& data) {
+
+void printHex(const string& label, const vector<uint8_t>& data) {
     cout << label << ": ";
-    for (auto byte_val : data) {
-        cout << hex << setw(2) << setfill('0')
-             << static_cast<int>(static_cast<uint8_t>(byte_val)) << " ";
+    for (size_t i = 0; i < data.size(); i++) {
+        cout << hex << setw(2) << setfill('0') << static_cast<int>(data[i]) << " ";
     }
     cout << dec << endl;
 }
 
-bool Comparing(mass_b original, mass_b decrypted){
-    if (areEqual(original, decrypted)) {
-        cout << "All is good" << endl;
-    } else {
-        cout << "All is NOT good" << endl;
-
-        // Покажем различия
-        cout << "DIFF:" << endl;
-        for (size_t i = 0; i < original.size(); i++) {
-            if (original[i] != decrypted[i]) {
-                cout << "  Byte " << i << ": "
-                     << hex << setw(2) << static_cast<int>(static_cast<uint8_t>(original[i]))
-                     << " vs "
-                     << hex << setw(2) << static_cast<int>(static_cast<uint8_t>(decrypted[i]))
-                     << dec << endl;
-            }
-        }
-        return false;
-    }
-    return true;
-}
-
-bool test(auto& alg, mass_b& original, mass_b& key){
+bool test(SymmetricCipherContext& context, const vector<uint8_t>& original, const vector<uint8_t>& key) {
     try {
-
         cout << "\n1. Start data:" << endl;
         printHex("original text", original);
         printHex("Key", key);
 
-
-        alg->setupKeys(key);
-
-        // 4. Шифруем
         cout << "\n2. Encrypting..." << endl;
-        mass_b encrypted = alg->encrypt(original);
+        auto encrypted = context.encrypt(original);
         printHex("Encrypted text", encrypted);
 
-        // 5. Проверяем, что шифрование изменило данные
-        if (areEqual(original, encrypted)) {
-            cout << "Error: Encryption didn`t do anything!" << endl;
+        // Проверяем, что шифрование что-то изменило
+        bool same = true;
+        for (size_t i = 0; i < original.size(); i++) {
+            if (encrypted[i] != original[i]) {
+                same = false;
+                break;
+            }
+        }
+
+        if (same) {
+            cout << "Error: Encryption didn't do anything!" << endl;
             return false;
         } else {
             cout << "Encrypted successfully" << endl << endl;
         }
 
-        // 6. Дешифруем
         cout << "\n3. Decrypting..." << endl;
-        mass_b decrypted = alg->decrypt(encrypted);
+        auto decrypted = context.decrypt(encrypted);
         printHex("Decrypted text", decrypted);
 
-        // 7. Сравниваем оригинал и результат дешифрования
         cout << "\n4. Compare res:" << endl;
-        Comparing(original, decrypted);
+        if (original == decrypted) {
+            cout << "All is good" << endl;
+        } else {
+            cout << "All is NOT good" << endl;
+            return false;
+        }
 
     } catch (const exception& e) {
         cout << "Error: " << e.what() << endl;
@@ -88,26 +71,38 @@ bool test(auto& alg, mass_b& original, mass_b& key){
 }
 
 int main() {
-    auto des = std::make_unique<DES>();
-    auto deal = std::make_unique<DEAL>();
-    mass_b original_des = {byte{0x01}, byte{0x23}, byte{0x45}, byte{0x67},
-                           byte{0x89}, byte{0xAB}, byte{0xCD}, byte{0xEF}};
-    mass_b key_des = {byte{0x13}, byte{0x34}, byte{0x57}, byte{0x79},
-                      byte{0x9B}, byte{0xBC}, byte{0xDF}, byte{0xF1}};
-    mass_b original_deal = {
-            byte{0x00}, byte{0x11}, byte{0x22}, byte{0x33},
-            byte{0x44}, byte{0x55}, byte{0x66}, byte{0x77},
-            byte{0x88}, byte{0x99}, byte{0xAA}, byte{0xBB},
-            byte{0xCC}, byte{0xDD}, byte{0xEE}, byte{0xFF}
-    };
+    // Тестовые данные
+    vector<uint8_t> text = {'S', 'o', 'm', 'e', ' ', 't', 'e', 'x', 't', ' ', 't', 'o', ' ', 'c', 'h', 'e',
+                            'c', 'k', ' ', 'i', 'f', ' ', 'D', 'E', 'S', ' ', 'w', 'o', 'r', 'k', 's', '.',
+                            '\n', 'I', 'f', ' ', 'y', 'o', 'u', ' ', 's', 'e', 'e', ' ', 't', 'h', 'i', 's',
+                            ',', ' ', 'I', ' ', 'h', 'a', 'l', 'f', ' ', 'w', 'o', 'n', '!', '\0'};
 
-    mass_b key_deal = {
-            byte{0x01}, byte{0x23}, byte{0x45}, byte{0x67},
-            byte{0x89}, byte{0xAB}, byte{0xCD}, byte{0xEF},
-            byte{0xFE}, byte{0xDC}, byte{0xBA}, byte{0x98},
-            byte{0x76}, byte{0x54}, byte{0x32}, byte{0x10}
-    };
-    test(des, original_des, key_des);
-    test(deal, original_deal, key_deal);
+    vector<uint8_t> key_des = {10, 23, 54, 3, 124, 43, 76, 255};
+    vector<uint8_t> key_deal = {10, 23, 54, 3, 124, 43, 76, 255,
+                                200, 150, 100, 50, 25, 75, 125, 175};
+
+    // Тест DES
+    cout << "=== Testing DES ===" << endl;
+    SymmetricCipherContext desContext(
+            CipherAlgorithm::DES,
+            CipherMode::ECB,
+            PaddingMode::PKCS7,
+            key_des
+    );
+    test(desContext, text, key_des);
+
+    // Тест DEAL
+    cout << "\n=== Testing DEAL ===" << endl;
+    SymmetricCipherContext dealContext(
+            CipherAlgorithm::DEAL,
+            CipherMode::ECB,
+            PaddingMode::PKCS7,
+            key_deal,
+            {},
+            ByteOrder::BIG_ENDIAN,
+            16
+    );
+    test(dealContext, text, key_deal);
+
     return 0;
 }

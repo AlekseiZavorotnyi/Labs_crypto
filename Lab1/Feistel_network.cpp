@@ -1,227 +1,106 @@
+#include "Bit_operations.h"
 #include <algorithm>
-#include <memory>
-#include <iostream>
-#include "Interfaces.h"
-#include <vector>
-
-class plus_functions{
-protected:
-    template<size_t N>
-    std::bitset<N> bytesToBitset(mass_b& input, ByteOrder byte_order) {
-        size_t expected_bytes = (N + 7) / 8;
-        if (input.size() != expected_bytes) {
-            throw std::invalid_argument("Input size doesn't match bitset size");
-        }
-
-        std::bitset<N> result;
-
-        if (byte_order == ByteOrder::BIG_ENDIAN) {
-            for (size_t i = 0; i < expected_bytes; i++) {
-                auto byte_val = static_cast<uint8_t>(input[i]);
-                for (int j = 0; j < 8; j++) {
-                    size_t bit_pos = (expected_bytes - 1 - i) * 8 + (7 - j);
-                    if (bit_pos < N) {
-                        result[bit_pos] = (byte_val >> j) & 1;
-                    }
-                }
-            }
-        } else {
-            for (size_t i = 0; i < expected_bytes; i++) {
-                auto byte_val = static_cast<uint8_t>(input[i]);
-                for (int j = 0; j < 8; j++) {
-                    size_t bit_pos = i * 8 + j;
-                    if (bit_pos < N) {
-                        result[bit_pos] = (byte_val >> j) & 1;
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    template<size_t N>
-    mass_b bitsetToBytes(std::bitset<N>& bs, ByteOrder byte_order) {
-        size_t byte_count = (N + 7) / 8;
-        mass_b result(byte_count, byte{0});
-
-        if (byte_order == ByteOrder::BIG_ENDIAN) {
-            for (size_t i = 0; i < N; i++) {
-                if (bs[i]) {
-                    size_t byte_index = (N - 1 - i) / 8;
-                    size_t bit_index = 7 - ((N - 1 - i) % 8);
-                    result[byte_index] |= std::byte{1} << bit_index;
-                }
-            }
-        } else {
-            for (size_t i = 0; i < N; i++) {
-                if (bs[i]) {
-                    size_t byte_index = i / 8;
-                    size_t bit_index = i % 8;
-                    result[byte_index] |= std::byte{1} << bit_index;
-                }
-            }
-        }
-
-        return result;
-    }
-
-    template<size_t N, size_t M>
-    std::pair<std::bitset<M>, std::bitset<N - M>> splitBitset(std::bitset<N>& input) {
-        static_assert(M < N, "First part size must be less than total size");
-
-        std::bitset<M> left;
-        std::bitset<N - M> right;
-
-        for (size_t i = 0; i < M; i++) {
-            left[i] = input[i + (N - M)];
-        }
-
-        for (size_t i = 0; i < N - M; i++) {
-            right[i] = input[i];
-        }
-
-        return {left, right};
-    }
-
-    template<size_t N, size_t M>
-    std::bitset<N + M> combineBitsets(std::bitset<N>& left, std::bitset<M>& right) {
-        std::bitset<N + M> result;
-
-        for (size_t i = 0; i < N; i++) {
-            result[i + M] = left[i];
-        }
-
-        for (size_t i = 0; i < M; i++) {
-            result[i] = right[i];
-        }
-
-        return result;
-    }
-
-    mass_b P_block(mass_b st, mass_i p_bl, ByteOrder order = ByteOrder::BIG_ENDIAN, StartIndex num_st = StartIndex::ZERO){
-        if (p_bl.size() % 8 != 0){
-            throw std::invalid_argument("P block must be divisible by 8");
-        }
-        size_t size_byte = p_bl.size() / 8;
-        mass_b res(size_byte, byte{0});
-        for (size_t i = 0; i < size_byte; i++){
-            for (size_t j = 0; j < 8; j++) {
-                size_t byte_index_res = i, bit_index_res = j;
-                size_t bit_index = p_bl[byte_index_res * 8 + bit_index_res];
-                if (num_st == StartIndex::ONE){
-                    bit_index--;
-                }
-                size_t byte_index_st = bit_index / 8;
-                size_t bit_index_st = bit_index % 8;
-                if (order == ByteOrder::BIG_ENDIAN) {
-                    bit_index_res = 7 - bit_index_res;
-                    bit_index_st = 7 - bit_index_st;
-                }
-                uint8_t cur_bit = (static_cast<uint8_t>(st[byte_index_st]) >> bit_index_st) & 1;
-                if (cur_bit) {
-                    res[byte_index_res] |= std::byte{1} << bit_index_res;
-                }
-            }
-        }
-        return res;
-    }
-};
+#include <stdexcept>
 
 class Feistel_network {
 private:
     std::unique_ptr<IKeyExpansion> key_expansion;
     std::unique_ptr<IEncryptionRound> round_function;
-    mass_mass_b roundKeys_;
+    uint8_t* round_keys;
+    size_t num_rounds;
+    size_t block_size;
+    size_t key_size;
     bool were_keysSetup = false;
 
 public:
     Feistel_network(std::unique_ptr<IKeyExpansion> key_expansion,
-                    std::unique_ptr<IEncryptionRound> round_function)
+                    std::unique_ptr<IEncryptionRound> round_function,
+                    size_t rounds, size_t blk_size, size_t k_size)
             : key_expansion(std::move(key_expansion)),
-              round_function(std::move(round_function)) {}
+              round_function(std::move(round_function)),
+              num_rounds(rounds),
+              block_size(blk_size),
+              key_size(k_size) {
+        round_keys = new uint8_t[rounds * k_size];
+    }
 
-    virtual ~Feistel_network() = default;
+    ~Feistel_network() {
+        delete[] round_keys;
+    }
 
-    mass_b en_de_crypt(mass_b& block, bool encrypt) {
+    void en_de_crypt(const uint8_t* block, uint8_t* output, bool encrypt) {
         if (!were_keysSetup) {
             throw std::runtime_error("Keys not setup. Call setupKeys() first.");
         }
 
-        size_t n = block.size();
-        if (n % 2 != 0) {
+        if (block_size % 2 != 0) {
             throw std::invalid_argument("Block size must be even");
         }
 
-        auto keys = roundKeys_;
-        if (!encrypt) {
-            std::reverse(keys.begin(), keys.end());
-        }
+        size_t half_size = block_size / 2;
+        auto* L_prev = new uint8_t[half_size];
+        auto* R_prev = new uint8_t[half_size];
+        auto* temp = new uint8_t[half_size];
+        auto* res_F = new uint8_t[half_size];
 
-        mass_b L_prev(block.begin(), block.begin() + n / 2);
-        mass_b R_prev(block.begin() + n / 2, block.end());
+        // Инициализация L и R
+        std::copy(block, block + half_size, L_prev);
+        std::copy(block + half_size, block + block_size, R_prev);
 
-        for (auto& K_cur : keys) {
-            mass_b temp = R_prev;
-            mass_b res_F = round_function->encryptRound(R_prev, K_cur);
+        for (size_t i = 0; i < num_rounds; i++) {
+            size_t round_idx = encrypt ? i : num_rounds - 1 - i;
+            const uint8_t* current_key = round_keys + (round_idx * key_size);
 
-            size_t min_size = std::min(L_prev.size(), res_F.size());
-            for (size_t j = 0; j < min_size; j++) {
+            // temp = R_prev
+            std::copy(R_prev, R_prev + half_size, temp);
+
+            // res_F = F(R_prev, K_cur)
+            round_function->encryptRound(R_prev, current_key, res_F);
+
+            // R_prev = L_prev XOR res_F
+            for (size_t j = 0; j < half_size; j++) {
                 R_prev[j] = L_prev[j] ^ res_F[j];
             }
 
-            L_prev = temp;
+            // L_prev = temp
+            std::copy(temp, temp + half_size, L_prev);
         }
 
-        mass_b res = R_prev;
-        res.insert(res.end(), L_prev.begin(), L_prev.end());
-        return res;
+        // output = R_prev + L_prev
+        std::copy(R_prev, R_prev + half_size, output);
+        std::copy(L_prev, L_prev + half_size, output + half_size);
+
+        delete[] L_prev;
+        delete[] R_prev;
+        delete[] temp;
+        delete[] res_F;
     }
 
-    void setupKeys(mass_b& key) {
+    void setupKeys(const uint8_t* key, size_t key_len) {
         were_keysSetup = true;
-        roundKeys_ = key_expansion->key_extension(key);
+        key_expansion->key_extension(key, key_len, round_keys, num_rounds);
     }
 };
 
-class DESRound : public IEncryptionRound, public plus_functions {
+class DESRound : public IEncryptionRound {
 private:
     ByteOrder byte_order;
 
 public:
     explicit DESRound(ByteOrder order = ByteOrder::BIG_ENDIAN) : byte_order(order) {}
 
-    mass_b applyE(mass_b& inputBlock) {
-        mass_i E = {
-                31,  0,  1,  2,  3,  4,
-                3,  4,  5,  6,  7,  8,
-                7,  8,  9, 10, 11, 12,
-                11, 12, 13, 14, 15, 16,
-                15, 16, 17, 18, 19, 20,
-                19, 20, 21, 22, 23, 24,
-                23, 24, 25, 26, 27, 28,
-                27, 28, 29, 30, 31,  0
+    void applyE(const uint8_t* inputBlock, uint8_t* output) {
+        static const int E[] = {
+                31,  0,  1,  2,  3,  4,  3,  4,  5,  6,  7,  8,
+                7,  8,  9, 10, 11, 12, 11, 12, 13, 14, 15, 16,
+                15, 16, 17, 18, 19, 20, 19, 20, 21, 22, 23, 24,
+                23, 24, 25, 26, 27, 28, 27, 28, 29, 30, 31,  0
         };
-        return P_block(inputBlock, E, ByteOrder::BIG_ENDIAN, StartIndex::ZERO);
+        P_block(inputBlock, 4, E, 48, output, ByteOrder::BIG_ENDIAN, StartIndex::ZERO);
     }
 
-    mass_b xorWithKey(mass_b& data, mass_b& key) {
-        if (data.size() != key.size()) {
-            throw std::invalid_argument("Arrays must have the same size");
-        }
-
-        mass_b result;
-        result.reserve(data.size());
-
-        for (size_t i = 0; i < data.size(); i++) {
-            result.push_back(data[i] ^ key[i]);
-        }
-
-        return result;
-    }
-
-    mass_b applySboxes(mass_b& input48) {
-        mass_mass_mass_i S_BOXES = {
+    void applySboxes(const uint8_t* input48, uint8_t* output32) {
+        static const uint8_t S_BOXES[8][4][16] = {
                 {
                         {14,  4, 13,  1,  2, 15, 11,  8,  3, 10,  6, 12,  5,  9,  0,  7},
                         { 0, 15,  7,  4, 14,  2, 13,  1, 10,  6, 12, 11,  9,  5,  3,  8},
@@ -244,7 +123,7 @@ public:
                         { 7, 13, 14,  3,  0,  6,  9, 10,  1,  2,  8,  5, 11, 12,  4, 15},
                         {13,  8, 11,  5,  6, 15,  0,  3,  4,  7,  2, 12,  1, 10, 14,  9},
                         {10,  6,  9,  0, 12, 11,  7, 13, 15,  1,  3, 14,  5,  2,  8,  4},
-                        { 3, 15,  0,  6, 10,  1, 13,  8,  9,  4,  5, 11, 12,  7,  2, 14}
+                        { 3, 15,  0,  6, 10,  1, 13,  8,  9,  4,  5,  11, 12,  7,  2, 14}
                 },
                 {
                         { 2, 12,  4,  1,  7, 10, 11,  6,  8,  5,  3, 15, 13,  0, 14,  9},
@@ -262,7 +141,7 @@ public:
                         { 4, 11,  2, 14, 15,  0,  8, 13,  3, 12,  9,  7,  5, 10,  6,  1},
                         {13,  0, 11,  7,  4,  9,  1, 10, 14,  3,  5, 12,  2, 15,  8,  6},
                         { 1,  4, 11, 13, 12,  3,  7, 14, 10, 15,  6,  8,  0,  5,  9,  2},
-                        { 6, 11, 13,  8,  1,  4, 10,  7,  9,  5,  0, 15, 14,  2,  3,  12}
+                        { 6, 11, 13,  8,  1,  4, 10,  7,  9,  5,  0, 15, 14,  2,  3, 12}
                 },
                 {
                         {13,  2,  8,  4,  6, 15, 11,  1, 10,  9,  3, 14,  5,  0, 12,  7},
@@ -272,103 +151,121 @@ public:
                 }
         };
 
-        std::bitset<48> inputBits = bytesToBitset<48>(input48, byte_order);
-        std::bitset<32> outputBits;
+        uint64_t input64 = 0;
+        for (int i = 0; i < 6; i++) {
+            input64 = (input64 << 8) | input48[i];
+        }
+        input64 <<= 16;
+        uint32_t result = 0;
 
         for (int sbox = 0; sbox < 8; sbox++) {
-            int startBit = sbox * 6;
+            // Извлекаем 6 бит для S-блока (старшие 48 бит input64)
+            int startBit = 16 + (7 - sbox) * 6; // Начинаем с старших битов
 
-            int row = (inputBits[47 - startBit] ? 2 : 0) |
-                      (inputBits[47 - startBit - 5] ? 1 : 0);
+            // Получаем строку и столбец
+            int row = ((input64 >> (startBit + 5)) & 1) << 1; // Первый бит
+            row |= ((input64 >> (startBit + 0)) & 1);          // Последний бит
 
-            int col = (inputBits[47 - startBit - 1] ? 8 : 0) |
-                      (inputBits[47 - startBit - 2] ? 4 : 0) |
-                      (inputBits[47 - startBit - 3] ? 2 : 0) |
-                      (inputBits[47 - startBit - 4] ? 1 : 0);
+            int col = (input64 >> (startBit + 1)) & 0xF;       // Средние 4 бита
 
             int sboxValue = S_BOXES[sbox][row][col];
 
-            for (int i = 0; i < 4; i++) {
-                outputBits[31 - (sbox * 4 + i)] = (sboxValue >> (3 - i)) & 1;
-            }
+            // Записываем 4 бита результата
+            result = (result << 4) | sboxValue;
         }
 
-        return bitsetToBytes<32>(outputBits, byte_order);
+        // Преобразуем результат в байты
+        for (int i = 0; i < 4; i++) {
+            output32[i] = (result >> (24 - i * 8)) & 0xFF;
+        }
     }
 
-    mass_b applyP(mass_b& input32) {
-        if (input32.size() != 4) {
-            throw std::invalid_argument("P permutation input must be 32 bits (4 bytes)");
-        }
-
-        mass_i P_TABLE = {
-                15,  6, 19, 20, 28, 11, 27, 16,
-                0, 14, 22, 25,  4, 17, 30,  9,
-                1,  7, 23, 13, 31, 26,  2,  8,
-                18, 12, 29,  5, 21, 10,  3, 24
+    void applyP(const uint8_t* input32, uint8_t* output32) {
+        static const int P_TABLE[] = {
+                15,  6, 19, 20, 28, 11, 27, 16,  0, 14, 22, 25,  4, 17, 30,  9,
+                1,  7, 23, 13, 31, 26,  2,  8, 18, 12, 29,  5, 21, 10,  3, 24
         };
-
-        return P_block(input32, P_TABLE, byte_order, StartIndex::ZERO);
+        P_block(input32, 4, P_TABLE, 32, output32, byte_order, StartIndex::ZERO);
     }
 
-    mass_b encryptRound(mass_b& inputBlock, mass_b& roundKey) override {
-        mass_b expanded = applyE(inputBlock);
-        mass_b xored = xorWithKey(expanded, roundKey);
-        mass_b sboxed = applySboxes(xored);
-        mass_b result = applyP(sboxed);
-        return result;
+    void encryptRound(const uint8_t* inputBlock, const uint8_t* roundKey, uint8_t* output) override {
+        uint8_t expanded[6];
+        uint8_t xored[6];
+        uint8_t sboxed[4];
+
+        applyE(inputBlock, expanded);
+
+        // XOR с ключом
+        for (size_t i = 0; i < 6; i++) {
+            xored[i] = expanded[i] ^ roundKey[i];
+        }
+
+        applySboxes(xored, sboxed);
+        applyP(sboxed, output);
     }
-    
 };
 
-class DESKeyExpansion : public IKeyExpansion, public plus_functions{
+class DESKeyExpansion : public IKeyExpansion {
 private:
     ByteOrder byte_order;
 
 public:
     explicit DESKeyExpansion(ByteOrder order = ByteOrder::BIG_ENDIAN) : byte_order(order) {}
 
-    mass_mass_b key_extension(mass_b& input_key) override {
-        if (input_key.size() != 8) {
+    void key_extension(const uint8_t* input_key, size_t key_len, uint8_t* round_keys, size_t rounds) override {
+        if (key_len != 8) {
             throw std::invalid_argument("DES key must be 8 bytes (64 bits)");
         }
 
-        mass_mass_b RES_KEYS(16);
-        mass_i PC1 = {
+        static const int PC1_C[] = {
                 57, 49, 41, 33, 25, 17, 9, 1, 58, 50, 42, 34, 26, 18,
-                10, 2, 59, 51, 43, 35, 27, 19, 11, 3, 60, 52, 44, 36,
+                10, 2, 59, 51, 43, 35, 27, 19, 11, 3, 60, 52, 44, 36
+        };
+
+
+        static const int PC1_D[] = {
                 63, 55, 47, 39, 31, 23, 15, 7, 62, 54, 46, 38, 30, 22,
                 14, 6, 61, 53, 45, 37, 29, 21, 13, 5, 28, 20, 12, 4
         };
 
-        mass_i PC2 = {
+        static const int PC2[] = {
                 14, 17, 11, 24, 1, 5, 3, 28, 15, 6, 21, 10,
                 23, 19, 12, 4, 26, 8, 16, 7, 27, 20, 13, 2,
                 41, 52, 31, 37, 47, 55, 30, 40, 51, 45, 33, 48,
                 44, 49, 39, 56, 34, 53, 46, 42, 50, 36, 29, 32
         };
 
-        mass_b res_PC1 = P_block(input_key, PC1, byte_order, StartIndex::ONE);
-        std::bitset<56> res_PC1_bits = bytesToBitset<56>(res_PC1, byte_order);
+        uint8_t C[4] = {0}, D[4] = {0};
+        P_block(input_key, 8, PC1_C, 28, C, byte_order, StartIndex::ONE);
+        P_block(input_key, 8, PC1_D, 28, D, byte_order, StartIndex::ONE);
 
-        auto [C, D] = splitBitset<56, 28>(res_PC1_bits);
+        uint32_t Ci = *(reinterpret_cast<uint32_t*>(C));
+        uint32_t Di = *(reinterpret_cast<uint32_t*>(D));
+
+        uint32_t mask = (1u << 28) - 1;
 
         for (int i = 1; i <= 16; i++) {
+            size_t shift;
             if (i == 1 || i == 2 || i == 9 || i == 16) {
-                C = (C << 1) | (C >> 27);
-                D = (D << 1) | (D >> 27);
+                shift = 1;
             } else {
-                C = (C << 2) | (C >> 26);
-                D = (D << 2) | (D >> 26);
+                shift = 2;
             }
 
-            std::bitset<56> comb_C_D = combineBitsets<28, 28>(C, D);
-            RES_KEYS[i - 1] = P_block(bitsetToBytes<56>(comb_C_D, byte_order), PC2, byte_order, StartIndex::ONE);
-        }
+            Ci = ((Ci << shift) | (Ci >> (28 - shift))) & mask;
+            Di = ((Di << shift) | (Di >> (28 - shift))) & mask;
 
-        return RES_KEYS;
+            uint64_t CiDi = 0;
+            uint64_t CiShift = Ci;
+            CiShift = CiShift << 28;
+            CiDi = CiShift | (Di & mask);
+
+            auto* CiDiArr = reinterpret_cast<uint8_t*>(&CiDi);
+
+            uint8_t* round_key = round_keys + ((i-1) * 6);
+            P_block(CiDiArr, 7, PC2, 48, round_key, byte_order, StartIndex::ONE);
+        }
     }
-    
 };
 
 class DES : public ISymmetricCipher {
@@ -377,25 +274,24 @@ private:
     ByteOrder byte_order;
 
 public:
-    DES() : byte_order(ByteOrder::BIG_ENDIAN),
-            feistel(std::make_unique<DESKeyExpansion>(byte_order),
-                    std::make_unique<DESRound>(byte_order)) {}
+    explicit DES(ByteOrder byte_order = ByteOrder::BIG_ENDIAN) : byte_order(byte_order),
+    feistel(std::make_unique<DESKeyExpansion>(byte_order),
+            std::make_unique<DESRound>(byte_order), 16, 8, 6) {}
 
-    explicit DES(ByteOrder byte_order) : byte_order(byte_order),
-                                         feistel(std::make_unique<DESKeyExpansion>(byte_order),
-                                                 std::make_unique<DESRound>(byte_order)) {}
-
-    mass_b encrypt(mass_b& block) override {
-        return feistel.en_de_crypt(block, true);
+    void encrypt(const uint8_t* input, uint8_t* output) override {
+        feistel.en_de_crypt(input, output, true);
     }
 
-    mass_b decrypt(mass_b& block) override {
-        return feistel.en_de_crypt(block, false);
+    void decrypt(const uint8_t* input, uint8_t* output) override {
+        feistel.en_de_crypt(input, output, false);
     }
 
-    void setupKeys(mass_b& key) override {
-        feistel.setupKeys(key);
+    void setupKeys(const uint8_t* key, size_t key_len) override {
+        feistel.setupKeys(key, key_len);
     }
+
+    size_t blockSize() const override { return 8; }
+    size_t keySize() const override { return 8; }
 };
 
 class DESAdapter {
@@ -403,97 +299,99 @@ private:
     DES des_impl;
 
 public:
-    mass_b encrypt(mass_b& data, mass_b& key) {
-        des_impl.setupKeys(key);
-        return des_impl.encrypt(data);
+    void encrypt(const uint8_t* data, const uint8_t* key, uint8_t* output) {
+        des_impl.setupKeys(key, 8);
+        des_impl.encrypt(data, output);
     }
 
-    mass_b decrypt(mass_b& data, mass_b& key) {
-        des_impl.setupKeys(key);
-        return des_impl.decrypt(data);
+    void decrypt(const uint8_t* data, const uint8_t* key, uint8_t* output) {
+        des_impl.setupKeys(key, 8);
+        des_impl.decrypt(data, output);
     }
 };
 
 class DEALRound : public IEncryptionRound {
 private:
     DESAdapter des_adapter_;
+    ByteOrder byte_order;
 
-    mass_b modifyKey(mass_b &originalKey, uint8_t modifier) {
-        mass_b modified = originalKey;
-        for (auto &byte_val: modified) {
-            uint8_t val = static_cast<uint8_t>(byte_val) ^ modifier;
-            byte_val = static_cast<byte>(val);
+    void modifyKey(const uint8_t* originalKey, uint8_t modifier, uint8_t* modifiedKey) {
+        for (size_t i = 0; i < 8; i++) {
+            modifiedKey[i] = originalKey[i] ^ modifier;
         }
-        return modified;
     }
 
 public:
-    mass_b encryptRound(mass_b &inputBlock, mass_b &roundKey) override {
-        if (inputBlock.size() != 8) {
-            throw std::invalid_argument("DEAL encryptRound-function input must be 8 bytes");
-        }
+    explicit DEALRound(ByteOrder order = ByteOrder::BIG_ENDIAN) : byte_order(order) {}
 
-        mass_mass_b des_keys(3);
+    void encryptRound(const uint8_t* inputBlock, const uint8_t* roundKey, uint8_t* output) override {
+        uint8_t temp1[8], temp2[8];
+        uint8_t modifiedKey1[8], modifiedKey2[8];
 
-        des_keys[0] = roundKey;
-        des_keys[1] = modifyKey(roundKey, 0x0F);
-        des_keys[2] = modifyKey(roundKey, 0xF0);
+        // Создаем модифицированные ключи
+        modifyKey(roundKey, 0x0F, modifiedKey1);
+        modifyKey(roundKey, 0xF0, modifiedKey2);
 
-        mass_b result = des_adapter_.encrypt(inputBlock, des_keys[0]);
-        result = des_adapter_.decrypt(result, des_keys[1]);
-        result = des_adapter_.encrypt(result, des_keys[2]);
-
-        return result;
+        // 3DES-like структура: E-D-E
+        des_adapter_.encrypt(inputBlock, roundKey, temp1);
+        des_adapter_.decrypt(temp1, modifiedKey1, temp2);
+        des_adapter_.encrypt(temp2, modifiedKey2, output);
     }
 };
 
 class DEALKeyExpansion : public IKeyExpansion {
-public:
-    mass_mass_b key_extension(mass_b& input_key) override {
-        size_t key_size = input_key.size();
+private:
+    ByteOrder byte_order;
 
-        if (key_size != 16 && key_size != 24 && key_size != 32) {
+public:
+    explicit DEALKeyExpansion(ByteOrder order = ByteOrder::BIG_ENDIAN) : byte_order(order) {}
+
+    void key_extension(const uint8_t* input_key, size_t key_len, uint8_t* round_keys, size_t rounds) override {
+        if (key_len != 16 && key_len != 24 && key_len != 32) {
             throw std::invalid_argument("DEAL key must be 16/24/32 bytes (128/192/256 bits)");
         }
 
-        mass_mass_b key_parts;
-        if (key_size == 16) {
-            key_parts.emplace_back(input_key.begin(), input_key.begin() + 8);
-            key_parts.emplace_back(input_key.begin() + 8, input_key.end());
-            key_parts.emplace_back(key_parts[0]);
-            key_parts.emplace_back(key_parts[1]);
+        // Разбиваем ключ на части по 8 байт
+        std::vector<std::vector<uint8_t>> key_parts;
+
+        if (key_len == 16) {
+            // 128-битный ключ: K1, K2, K1, K2
+            key_parts.emplace_back(input_key, input_key + 8);
+            key_parts.emplace_back(input_key + 8, input_key + 16);
+            key_parts.push_back(key_parts[0]);
+            key_parts.push_back(key_parts[1]);
         }
-        else if (key_size == 24) {
-            key_parts.emplace_back(input_key.begin(), input_key.begin() + 8);
-            key_parts.emplace_back(input_key.begin() + 8, input_key.begin() + 16);
-            key_parts.emplace_back(input_key.begin() + 16, input_key.end());
-            key_parts.emplace_back(key_parts[0]);
+        else if (key_len == 24) {
+            // 192-битный ключ: K1, K2, K3, K1
+            key_parts.emplace_back(input_key, input_key + 8);
+            key_parts.emplace_back(input_key + 8, input_key + 16);
+            key_parts.emplace_back(input_key + 16, input_key + 24);
+            key_parts.push_back(key_parts[0]);
         }
         else {
-            key_parts.emplace_back(input_key.begin(), input_key.begin() + 8);
-            key_parts.emplace_back(input_key.begin() + 8, input_key.begin() + 16);
-            key_parts.emplace_back(input_key.begin() + 16, input_key.begin() + 24);
-            key_parts.emplace_back(input_key.begin() + 24, input_key.end());
+            // 256-битный ключ: K1, K2, K3, K4
+            key_parts.emplace_back(input_key, input_key + 8);
+            key_parts.emplace_back(input_key + 8, input_key + 16);
+            key_parts.emplace_back(input_key + 16, input_key + 24);
+            key_parts.emplace_back(input_key + 24, input_key + 32);
         }
 
-        mass_mass_b round_keys;
-        for (int round_num = 0; round_num < 6; round_num++) {
-            mass_b round_key(8, byte{0});
+        // Генерируем раундовые ключи
+        for (size_t round_num = 0; round_num < rounds; round_num++) {
+            uint8_t* round_key = round_keys + (round_num * 8);
 
             for (size_t byte_idx = 0; byte_idx < 8; byte_idx++) {
                 uint8_t val = 0;
                 for (auto& part : key_parts) {
                     if (byte_idx < part.size()) {
-                        val ^= static_cast<uint8_t>(part[byte_idx]);
+                        val ^= part[byte_idx];
                     }
                 }
-                val ^= (round_num + 1);
-                round_key[byte_idx] = static_cast<byte>(val);
+                // Добавляем номер раунда
+                val ^= static_cast<uint8_t>(round_num + 1);
+                round_key[byte_idx] = val;
             }
-            round_keys.push_back(round_key);
         }
-
-        return round_keys;
     }
 };
 
@@ -501,25 +399,35 @@ class DEAL : public ISymmetricCipher {
 private:
     Feistel_network feistel;
     ByteOrder byte_order;
+    size_t actual_key_size;
 
 public:
-    DEAL() : byte_order(ByteOrder::BIG_ENDIAN),
-             feistel(std::make_unique<DEALKeyExpansion>(),
-                     std::make_unique<DEALRound>()) {}
+    explicit DEAL(size_t key_size = 16, ByteOrder byte_order = ByteOrder::BIG_ENDIAN)
+            : byte_order(byte_order), actual_key_size(key_size),
+              feistel(std::make_unique<DEALKeyExpansion>(byte_order),
+                      std::make_unique<DEALRound>(byte_order),
+                      6, 16, 8) {
 
-    explicit DEAL(ByteOrder byte_order) : byte_order(byte_order),
-                                          feistel(std::make_unique<DEALKeyExpansion>(),
-                                                  std::make_unique<DEALRound>()) {}
-
-    mass_b encrypt(mass_b& block) override {
-        return feistel.en_de_crypt(block, true);
+        if (key_size != 16 && key_size != 24 && key_size != 32) {
+            throw std::invalid_argument("DEAL key must be 16/24/32 bytes (128/192/256 bits)");
+        }
     }
 
-    mass_b decrypt(mass_b& block) override {
-        return feistel.en_de_crypt(block, false);
+    void encrypt(const uint8_t* input, uint8_t* output) override {
+        feistel.en_de_crypt(input, output, true);
     }
 
-    void setupKeys(mass_b& key) override {
-        feistel.setupKeys(key);
+    void decrypt(const uint8_t* input, uint8_t* output) override {
+        feistel.en_de_crypt(input, output, false);
     }
+
+    void setupKeys(const uint8_t* key, size_t key_len) override {
+        if (key_len != actual_key_size) {
+            throw std::invalid_argument("Provided key size doesn't match expected key size");
+        }
+        feistel.setupKeys(key, key_len);
+    }
+
+    size_t blockSize() const override { return 16; }
+    size_t keySize() const override { return actual_key_size; }
 };

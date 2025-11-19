@@ -1,21 +1,11 @@
 #ifndef LABS_CRYPTO_INTERFACES_H
 #define LABS_CRYPTO_INTERFACES_H
 
-#include <iostream>
-#include <vector>
 #include <cstddef>
-#include <vector>
-#include <cstddef>
-#include <stdexcept>
-#include <bitset>
 #include <cstdint>
-#include <fstream>
 #include <memory>
 
 using byte = std::byte;
-using mass_b = std::vector<byte>;
-using mass_i = std::vector<int>;
-using mass_mass_mass_i = std::vector<std::vector<std::vector<int>>>;
 
 enum class ByteOrder {
     BIG_ENDIAN,
@@ -31,33 +21,31 @@ enum class encryption_modes{
     ECB, CBC, PCBC, CFB, OFB, CTR, Random_Delta
 };
 
-enum class packing_modes{
+enum class padding_modes{
     Zeros,
     ANSI, //ANSI X.923
     PKCS7,
     ISO // ISO 10126
 };
 
-using byte = std::byte;
-using mass_b = std::vector<byte>;
-using mass_mass_b = std::vector<std::vector<byte>>;
-using mass_i = std::vector<int>;
 
 class IKeyExpansion {
 public:
-    virtual mass_mass_b key_extension(mass_b& input_key) = 0;
+    virtual void key_extension(const uint8_t* input_key, size_t key_len, uint8_t* round_keys, size_t rounds) = 0;
 };
 
 class IEncryptionRound {
 public:
-    virtual mass_b encryptRound(mass_b& inputBlock, mass_b& roundKey) = 0;
+    virtual void encryptRound(const uint8_t* inputBlock, const uint8_t* roundKey, uint8_t* output) = 0;
 };
 
 class ISymmetricCipher  {
 public:
-    virtual mass_b encrypt(mass_b& block) = 0;
-    virtual mass_b decrypt(mass_b& block) = 0;
-    virtual void setupKeys(mass_b& en_de_crypt_key) = 0;
+    virtual void encrypt(const uint8_t* input, uint8_t* output) = 0;
+    virtual void decrypt(const uint8_t* input, uint8_t* output) = 0;
+    virtual void setupKeys(const uint8_t* key, size_t key_len) = 0;
+    virtual size_t blockSize() const = 0;
+    virtual size_t keySize() const = 0;
 };
 
 
