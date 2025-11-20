@@ -1,6 +1,8 @@
 #include "Bit_operations.h"
 #include <algorithm>
 #include <stdexcept>
+#include <vector>
+#include <cstring>
 
 class Feistel_network {
 private:
@@ -239,8 +241,9 @@ public:
         P_block(input_key, 8, PC1_C, 28, C, byte_order, StartIndex::ONE);
         P_block(input_key, 8, PC1_D, 28, D, byte_order, StartIndex::ONE);
 
-        uint32_t Ci = *(reinterpret_cast<uint32_t*>(C));
-        uint32_t Di = *(reinterpret_cast<uint32_t*>(D));
+        uint32_t Ci, Di;
+        std::memcpy(&Ci, C, sizeof(Ci));
+        std::memcpy(&Di, D, sizeof(Di));
 
         uint32_t mask = (1u << 28) - 1;
 
