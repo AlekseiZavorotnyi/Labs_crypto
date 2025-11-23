@@ -1,100 +1,99 @@
-// CipherModes.h
+// Encryption_Modes.h
 #pragma once
-#include <vector>
-#include <cstdint>
-#include <memory>
 #include <thread>
+#include <memory>
+#include <stdexcept>
 #include <algorithm>
 #include "Interfaces.h"
 
 class ICipherMode {
 public:
     virtual ~ICipherMode() = default;
-    virtual void processBlocks(std::vector<uint8_t>& data, ISymmetricCipher* cipher,
-                               const std::vector<uint8_t>& iv, bool encrypt) = 0;
+
+    // data: указатель на массив байтов, length: текущая длина (в байтах)
+    // iv: указатель на IV, размер IV = cipher->blockSize()
+    // encrypt: true -> шифрование, false -> расшифрование
+    virtual void processBlocks(uint8_t* data, size_t& length,
+                               ISymmetricCipher* cipher,
+                               const uint8_t* iv,
+                               bool encrypt) = 0;
+
     virtual bool canParallelize() const = 0;
     virtual bool requiresIV() const = 0;
 };
 
+
 class ECBMode : public ICipherMode {
 public:
-    void processBlocks(std::vector<uint8_t>& data, ISymmetricCipher* cipher,
-                       const std::vector<uint8_t>& iv, bool encrypt) override {
-        size_t block_size = cipher->blockSize();
-        size_t num_blocks = data.size() / block_size;
+    void processBlocks(uint8_t* data, size_t& length,
+                       ISymmetricCipher* cipher,
+                       const uint8_t* /*iv*/,
+                       bool encrypt) override
+    {
+        const size_t block_size = cipher->blockSize();
+        const size_t num_blocks = length / block_size;
 
-        // Параллельная обработка для ECB
-        if (num_blocks > 1) {
-            processBlocksParallel(data, cipher, encrypt);
-        } else {
-            for (size_t i = 0; i < num_blocks; i++) {
-                uint8_t* block = data.data() + i * block_size;
-                if (encrypt) cipher->encrypt(block, block);
-                else cipher->decrypt(block, block);
-            }
-        }
-    }
+        if (num_blocks == 0) return;
 
-    bool canParallelize() const override { return true; }
-    bool requiresIV() const override { return false; }
+        const unsigned hw = std::thread::hardware_concurrency();
+        const size_t num_threads = std::max<size_t>(1, std::min<size_t>(hw ? hw : 1, num_blocks));
+        const size_t blocks_per_thread = (num_blocks + num_threads - 1) / num_threads;
 
-private:
-    void processBlocksParallel(std::vector<uint8_t>& data, ISymmetricCipher* cipher, bool encrypt) {
-        size_t block_size = cipher->blockSize();
-        size_t num_blocks = data.size() / block_size;
-        size_t possible_threads = std::thread::hardware_concurrency();
+        // Параллельная обработка независимых блоков
+        std::unique_ptr<std::thread[]> threads(new std::thread[num_threads]);
 
-        size_t num_threads = std::min(possible_threads, num_blocks);
-        if (num_threads == 0) num_threads = 1;
+        for (size_t t = 0; t < num_threads; ++t) {
+            threads[t] = std::thread([=]() {
+                const size_t start_block = t * blocks_per_thread;
+                const size_t end_block = std::min((t + 1) * blocks_per_thread, num_blocks);
 
-        std::vector<std::thread> threads;
-        size_t blocks_per_thread = (num_blocks + num_threads - 1) / num_threads;
-
-        for (size_t t = 0; t < num_threads; t++) {
-            threads.emplace_back([&, t, encrypt]() {
-                size_t start_block = t * blocks_per_thread;
-                size_t end_block = std::min((t + 1) * blocks_per_thread, num_blocks);
-
-                for (size_t i = start_block; i < end_block; i++) {
-                    uint8_t* block = data.data() + i * block_size;
+                for (size_t i = start_block; i < end_block; ++i) {
+                    uint8_t* block = data + i * block_size;
                     if (encrypt) cipher->encrypt(block, block);
                     else cipher->decrypt(block, block);
                 }
             });
         }
-
-        for (auto& thread : threads) {
-            thread.join();
-        }
+        for (size_t t = 0; t < num_threads; ++t) threads[t].join();
     }
+
+    bool canParallelize() const override { return true; }
+    bool requiresIV() const override { return false; }
 };
+
 
 class CBCMode : public ICipherMode {
 public:
-    void processBlocks(std::vector<uint8_t>& data, ISymmetricCipher* cipher,
-                       const std::vector<uint8_t>& iv, bool encrypt) override {
-        size_t block_size = cipher->blockSize();
-        size_t num_blocks = data.size() / block_size;
-        std::vector<uint8_t> prev_block = iv;
+    void processBlocks(uint8_t* data, size_t& length,
+                       ISymmetricCipher* cipher,
+                       const uint8_t* iv,
+                       bool encrypt) override
+    {
+        const size_t block_size = cipher->blockSize();
+        const size_t num_blocks = length / block_size;
+        if (num_blocks == 0) return;
 
-        for (size_t i = 0; i < num_blocks; i++) {
-            uint8_t* block = data.data() + i * block_size;
+        // prev_block хранится как локальный буфер фиксированной длины
+        std::unique_ptr<uint8_t[]> prev_block(new uint8_t[block_size]);
+        std::copy(iv, iv + block_size, prev_block.get());
+
+        for (size_t i = 0; i < num_blocks; ++i) {
+            uint8_t* block = data + i * block_size;
 
             if (encrypt) {
-                // XOR с предыдущим блоком -> шифрование
-                for (size_t j = 0; j < block_size; j++) {
+                for (size_t j = 0; j < block_size; ++j)
                     block[j] ^= prev_block[j];
-                }
                 cipher->encrypt(block, block);
-                prev_block.assign(block, block + block_size);
+                std::copy(block, block + block_size, prev_block.get());
             } else {
-                // Дешифрование -> XOR с предыдущим блоком
-                std::vector<uint8_t> temp_block(block, block + block_size);
+                // Сохранить текущий шифртекстовый блок
+                std::unique_ptr<uint8_t[]> ctmp(new uint8_t[block_size]);
+                std::copy(block, block + block_size, ctmp.get());
+
                 cipher->decrypt(block, block);
-                for (size_t j = 0; j < block_size; j++) {
+                for (size_t j = 0; j < block_size; ++j)
                     block[j] ^= prev_block[j];
-                }
-                prev_block = temp_block;
+                std::copy(ctmp.get(), ctmp.get() + block_size, prev_block.get());
             }
         }
     }
@@ -105,33 +104,39 @@ public:
 
 class PCBCMode : public ICipherMode {
 public:
-    void processBlocks(std::vector<uint8_t>& data, ISymmetricCipher* cipher,
-                       const std::vector<uint8_t>& iv, bool encrypt) override {
-        size_t block_size = cipher->blockSize();
-        size_t num_blocks = data.size() / block_size;
-        std::vector<uint8_t> prev_input = iv;
-        std::vector<uint8_t> prev_output = iv;
+    void processBlocks(uint8_t* data, size_t& length,
+                       ISymmetricCipher* cipher,
+                       const uint8_t* iv,
+                       bool encrypt) override
+    {
+        const size_t block_size = cipher->blockSize();
+        const size_t num_blocks = length / block_size;
+        if (num_blocks == 0) return;
 
-        for (size_t i = 0; i < num_blocks; i++) {
-            uint8_t* block = data.data() + i * block_size;
+        std::unique_ptr<uint8_t[]> prev_in(new uint8_t[block_size]);
+        std::unique_ptr<uint8_t[]> prev_out(new uint8_t[block_size]);
+        std::copy(iv, iv + block_size, prev_in.get());
+        std::copy(iv, iv + block_size, prev_out.get());
+
+        for (size_t i = 0; i < num_blocks; ++i) {
+            uint8_t* block = data + i * block_size;
 
             if (encrypt) {
-                // XOR: input ^ prev_input ^ prev_output
-                for (size_t j = 0; j < block_size; j++) {
-                    block[j] ^= prev_input[j] ^ prev_output[j];
-                }
+                for (size_t j = 0; j < block_size; ++j)
+                    block[j] ^= (prev_in[j] ^ prev_out[j]);
                 cipher->encrypt(block, block);
-                prev_input.assign(data.data() + i * block_size, data.data() + (i + 1) * block_size);
-                prev_output.assign(block, block + block_size);
+                std::copy(data + i * block_size, data + (i + 1) * block_size, prev_in.get());
+                std::copy(block, block + block_size, prev_out.get());
             } else {
-                std::vector<uint8_t> temp_block(block, block + block_size);
+                std::unique_ptr<uint8_t[]> ctmp(new uint8_t[block_size]);
+                std::copy(block, block + block_size, ctmp.get());
+
                 cipher->decrypt(block, block);
-                // XOR: decrypted ^ prev_input ^ prev_output
-                for (size_t j = 0; j < block_size; j++) {
-                    block[j] ^= prev_input[j] ^ prev_output[j];
-                }
-                prev_input.assign(block, block + block_size);
-                prev_output = temp_block;
+                for (size_t j = 0; j < block_size; ++j)
+                    block[j] ^= (prev_in[j] ^ prev_out[j]);
+
+                std::copy(block, block + block_size, prev_in.get());
+                std::copy(ctmp.get(), ctmp.get() + block_size, prev_out.get());
             }
         }
     }
@@ -142,29 +147,33 @@ public:
 
 class CFBMode : public ICipherMode {
 public:
-    void processBlocks(std::vector<uint8_t>& data, ISymmetricCipher* cipher,
-                       const std::vector<uint8_t>& iv, bool encrypt) override {
-        size_t block_size = cipher->blockSize();
-        size_t num_blocks = data.size() / block_size;
-        std::vector<uint8_t> shift_register = iv;
+    void processBlocks(uint8_t* data, size_t& length,
+                       ISymmetricCipher* cipher,
+                       const uint8_t* iv,
+                       bool encrypt) override
+    {
+        const size_t block_size = cipher->blockSize();
+        const size_t num_blocks = length / block_size;
+        if (num_blocks == 0) return;
 
-        for (size_t i = 0; i < num_blocks; i++) {
-            uint8_t* block = data.data() + i * block_size;
+        std::unique_ptr<uint8_t[]> shift(new uint8_t[block_size]);
+        std::copy(iv, iv + block_size, shift.get());
 
-            // Шифруем регистр сдвига
-            std::vector<uint8_t> encrypted(block_size);
-            cipher->encrypt(shift_register.data(), encrypted.data());
+        std::unique_ptr<uint8_t[]> ks(new uint8_t[block_size]);
 
-            // XOR с входными данными
-            for (size_t j = 0; j < block_size; j++) {
-                block[j] ^= encrypted[j];
-            }
+        for (size_t i = 0; i < num_blocks; ++i) {
+            uint8_t* block = data + i * block_size;
 
-            // Обновляем регистр сдвига
+            cipher->encrypt(shift.get(), ks.get()); // шифруем регистр
+
+            for (size_t j = 0; j < block_size; ++j)
+                block[j] ^= ks[j];
+
+            // обновляем регистр
             if (encrypt) {
-                shift_register.assign(block, block + block_size);
+                std::copy(block, block + block_size, shift.get());
             } else {
-                shift_register.assign(data.data() + i * block_size, data.data() + (i + 1) * block_size);
+                std::copy(data + i * block_size, data + (i + 1) * block_size, shift.get());
             }
         }
     }
@@ -172,28 +181,32 @@ public:
     bool canParallelize() const override { return false; }
     bool requiresIV() const override { return true; }
 };
+
 
 class OFBMode : public ICipherMode {
 public:
-    void processBlocks(std::vector<uint8_t>& data, ISymmetricCipher* cipher,
-                       const std::vector<uint8_t>& iv, bool encrypt) override {
-        size_t block_size = cipher->blockSize();
-        size_t num_blocks = data.size() / block_size;
-        std::vector<uint8_t> key_stream = iv;
+    void processBlocks(uint8_t* data, size_t& length,
+                       ISymmetricCipher* cipher,
+                       const uint8_t* iv,
+                       bool /*encrypt*/) override
+    {
+        const size_t block_size = cipher->blockSize();
+        const size_t num_blocks = length / block_size;
+        if (num_blocks == 0) return;
 
-        for (size_t i = 0; i < num_blocks; i++) {
-            uint8_t* block = data.data() + i * block_size;
+        std::unique_ptr<uint8_t[]> stream(new uint8_t[block_size]);
+        std::unique_ptr<uint8_t[]> next_stream(new uint8_t[block_size]);
+        std::copy(iv, iv + block_size, stream.get());
 
-            // Генерируем следующий ключевой поток
-            std::vector<uint8_t> new_key_stream(block_size);
-            cipher->encrypt(key_stream.data(), new_key_stream.data());
+        for (size_t i = 0; i < num_blocks; ++i) {
+            uint8_t* block = data + i * block_size;
 
-            // XOR с ключевым потоком
-            for (size_t j = 0; j < block_size; j++) {
-                block[j] ^= new_key_stream[j];
-            }
+            cipher->encrypt(stream.get(), next_stream.get());
 
-            key_stream = std::move(new_key_stream);
+            for (size_t j = 0; j < block_size; ++j)
+                block[j] ^= next_stream[j];
+
+            std::copy(next_stream.get(), next_stream.get() + block_size, stream.get());
         }
     }
 
@@ -201,113 +214,124 @@ public:
     bool requiresIV() const override { return true; }
 };
 
+
 class CTRMode : public ICipherMode {
 public:
-    void processBlocks(std::vector<uint8_t>& data, ISymmetricCipher* cipher,
-                       const std::vector<uint8_t>& iv, bool encrypt) override {
-        size_t block_size = cipher->blockSize();
-        size_t num_blocks = data.size() / block_size;
+    void processBlocks(uint8_t* data, size_t& length,
+                       ISymmetricCipher* cipher,
+                       const uint8_t* iv,
+                       bool /*encrypt*/) override
+    {
+        const size_t block_size = cipher->blockSize();
+        const size_t num_blocks = length / block_size;
+        if (num_blocks == 0) return;
 
-        // Параллельная обработка для CTR
-        if (num_blocks > 1) {
-            processBlocksParallel(data, cipher, iv);
-        } else {
-            for (size_t i = 0; i < num_blocks; i++) {
-                processSingleBlock(data, cipher, iv, i);
-            }
+        const unsigned hw = std::thread::hardware_concurrency();
+        const size_t num_threads = std::max<size_t>(1, std::min<size_t>(hw ? hw : 1, num_blocks));
+        const size_t blocks_per_thread = (num_blocks + num_threads - 1) / num_threads;
+
+        std::unique_ptr<std::thread[]> threads(new std::thread[num_threads]);
+
+        for (size_t t = 0; t < num_threads; ++t) {
+            threads[t] = std::thread([=]() {
+                std::unique_ptr<uint8_t[]> counter(new uint8_t[block_size]);
+                std::copy(iv, iv + block_size, counter.get());
+
+                // локальный буфер для ключевого потока
+                std::unique_ptr<uint8_t[]> ks(new uint8_t[block_size]);
+
+                const size_t start_block = t * blocks_per_thread;
+                const size_t end_block = std::min((t + 1) * blocks_per_thread, num_blocks);
+
+                for (size_t i = start_block; i < end_block; ++i) {
+                    // counter = iv + i (big-endian инкремент)
+                    addToCounter(counter.get(), block_size, i);
+
+                    cipher->encrypt(counter.get(), ks.get());
+
+                    uint8_t* block = data + i * block_size;
+                    for (size_t j = 0; j < block_size; ++j)
+                        block[j] ^= ks[j];
+                }
+            });
         }
+        for (size_t t = 0; t < num_threads; ++t) threads[t].join();
     }
 
     bool canParallelize() const override { return true; }
     bool requiresIV() const override { return true; }
 
 private:
-    void processBlocksParallel(std::vector<uint8_t>& data, ISymmetricCipher* cipher,
-                               const std::vector<uint8_t>& iv) {
-        size_t block_size = cipher->blockSize();
-        size_t num_blocks = data.size() / block_size;
-        size_t possible_threads = std::thread::hardware_concurrency();
-
-        size_t num_threads = std::min(possible_threads, num_blocks);
-        if (num_threads == 0) num_threads = 1;
-
-        std::vector<std::thread> threads;
-        size_t blocks_per_thread = (num_blocks + num_threads - 1) / num_threads;
-
-        for (size_t t = 0; t < num_threads; t++) {
-            threads.emplace_back([&, t]() {
-                size_t start_block = t * blocks_per_thread;
-                size_t end_block = std::min((t + 1) * blocks_per_thread, num_blocks);
-
-                for (size_t i = start_block; i < end_block; i++) {
-                    processSingleBlock(data, cipher, iv, i);
+    static void addToCounter(uint8_t* counter, size_t counter_len, size_t add) {
+        // big-endian: инкремент с конца, учитывая переносы
+        size_t carry = add;
+        for (size_t k = 0; k < counter_len && carry > 0; ++k) {
+            size_t pos = counter_len - 1 - k;
+            size_t sum = static_cast<size_t>(counter[pos]) + (carry & 0xFF);
+            counter[pos] = static_cast<uint8_t>(sum & 0xFF);
+            carry >>= 8;
+            if (sum > 0xFF && pos > 0) {
+                // перенос
+                size_t p = pos - 1;
+                while (p < counter_len) { // защита от size_t underflow
+                    unsigned val = counter[p] + 1;
+                    counter[p] = static_cast<uint8_t>(val & 0xFF);
+                    if (val <= 0xFF) break;
+                    if (p == 0) break;
+                    --p;
                 }
-            });
-        }
-
-        for (auto& thread : threads) {
-            thread.join();
-        }
-    }
-
-    void processSingleBlock(std::vector<uint8_t>& data, ISymmetricCipher* cipher,
-                            const std::vector<uint8_t>& iv, size_t block_index) {
-        size_t block_size = cipher->blockSize();
-        uint8_t* block = data.data() + block_index * block_size;
-
-        std::vector<uint8_t> counter = iv;
-        // Увеличиваем счетчик на номер блока
-        for (size_t i = 0; i < sizeof(size_t); i++) {
-            size_t byte_pos = counter.size() - 1 - i;
-            uint8_t add_val = (block_index >> (i * 8)) & 0xFF;
-            uint16_t sum = counter[byte_pos] + add_val;
-            counter[byte_pos] = sum & 0xFF;
-            if (sum > 0xFF && byte_pos > 0) {
-                counter[byte_pos - 1] += 1;
             }
-        }
-
-        // Генерируем ключевой поток
-        std::vector<uint8_t> key_stream(block_size);
-        cipher->encrypt(counter.data(), key_stream.data());
-
-        // XOR с данными
-        for (size_t j = 0; j < block_size; j++) {
-            block[j] ^= key_stream[j];
         }
     }
 };
 
+
 class RandomDeltaMode : public ICipherMode {
 public:
-    void processBlocks(std::vector<uint8_t>& data, ISymmetricCipher* cipher,
-                       const std::vector<uint8_t>& iv, bool encrypt) override {
-        size_t block_size = cipher->blockSize();
-        size_t num_blocks = data.size() / block_size;
+    void processBlocks(uint8_t* data, size_t& length,
+                       ISymmetricCipher* cipher,
+                       const uint8_t* /*iv*/,
+                       bool encrypt) override
+    {
+        const size_t block_size = cipher->blockSize();
+        const size_t num_blocks = length / block_size;
+        if (num_blocks == 0) return;
 
-        for (size_t i = 0; i < num_blocks; i++) {
-            uint8_t* block = data.data() + i * block_size;
+        const unsigned hw = std::thread::hardware_concurrency();
+        const size_t num_threads = std::max<size_t>(1, std::min<size_t>(hw ? hw : 1, num_blocks));
+        const size_t blocks_per_thread = (num_blocks + num_threads - 1) / num_threads;
 
-            // Генерируем delta на основе номера блока
-            std::vector<uint8_t> delta(block_size);
-            std::fill(delta.begin(), delta.end(), static_cast<uint8_t>(i & 0xFF));
+        std::unique_ptr<std::thread[]> threads(new std::thread[num_threads]);
 
-            if (encrypt) {
-                // XOR с delta -> шифрование
-                for (size_t j = 0; j < block_size; j++) {
-                    block[j] ^= delta[j];
+        for (size_t t = 0; t < num_threads; ++t) {
+            threads[t] = std::thread([=]() {
+                std::unique_ptr<uint8_t[]> delta(new uint8_t[block_size]);
+
+                const size_t start_block = t * blocks_per_thread;
+                const size_t end_block = std::min((t + 1) * blocks_per_thread, num_blocks);
+
+                for (size_t i = start_block; i < end_block; ++i) {
+                    uint8_t* block = data + i * block_size;
+
+                    // Заполняем delta значением номера блока (мод 256)
+                    std::fill(delta.get(), delta.get() + block_size, static_cast<uint8_t>(i & 0xFF));
+
+                    if (encrypt) {
+                        for (size_t j = 0; j < block_size; ++j)
+                            block[j] ^= delta[j];
+                        cipher->encrypt(block, block);
+                    } else {
+                        cipher->decrypt(block, block);
+                        for (size_t j = 0; j < block_size; ++j)
+                            block[j] ^= delta[j];
+                    }
                 }
-                cipher->encrypt(block, block);
-            } else {
-                // Дешифрование -> XOR с delta
-                cipher->decrypt(block, block);
-                for (size_t j = 0; j < block_size; j++) {
-                    block[j] ^= delta[j];
-                }
-            }
+            });
         }
+
+        for (size_t t = 0; t < num_threads; ++t) threads[t].join();
     }
 
     bool canParallelize() const override { return true; }
-    bool requiresIV() const override { return true; }
+    bool requiresIV() const override { return false; } // IV реально не используется
 };

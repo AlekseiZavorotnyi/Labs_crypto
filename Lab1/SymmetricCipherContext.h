@@ -1,45 +1,35 @@
 // SymmetricCipherContext.h
-#include <vector>
+#pragma once
 #include <memory>
 #include <thread>
 #include <algorithm>
 #include <fstream>
 #include <iterator>
 #include <functional>
+#include <stdexcept>
 #include "Interfaces.h"
 #include "Feistel_network.h"
 #include "Encryption_Modes.h"
 #include "Padding_Modes.h"
 #include <variant>
+#include <iostream>
 
-enum class CipherMode {
-    ECB, CBC, PCBC, CFB, OFB, CTR, RANDOM_DELTA
-};
+enum class CipherMode { ECB, CBC, PCBC, CFB, OFB, CTR, RANDOM_DELTA };
+enum class PaddingMode { ZEROS, ANSI_X923, PKCS7, ISO_10126 };
+enum class CipherAlgorithm { DES, DEAL };
 
-enum class PaddingMode {
-    ZEROS, ANSI_X923, PKCS7, ISO_10126
-};
-
-enum class CipherAlgorithm {
-    DES, DEAL
-};
-
-#include <variant>
-
-
-// Для дополнительных параметров
-using AdditionalParam = std::variant<int, std::string, std::vector<uint8_t>>;
+using AdditionalParam = std::variant<int, std::string, std::unique_ptr<uint8_t[]>>;
 
 class SymmetricCipherContext {
 private:
     std::unique_ptr<ISymmetricCipher> cipher;
     std::unique_ptr<ICipherMode> mode;
     std::unique_ptr<IPadding> padding;
-    std::vector<uint8_t> iv;
+    std::unique_ptr<uint8_t[]> iv;
     ByteOrder byte_order;
     size_t key_size;
+    size_t block_size;
 
-    // Внутренняя фабрика режимов
     std::unique_ptr<ICipherMode> createCipherMode(CipherMode mode) {
         switch (mode) {
             case CipherMode::ECB: return std::make_unique<ECBMode>();
@@ -53,9 +43,7 @@ private:
         }
     }
 
-    bool requiresIV(CipherMode mode) const {
-        return mode != CipherMode::ECB;
-    }
+    bool requiresIV(CipherMode mode) const { return mode != CipherMode::ECB; }
 
     std::unique_ptr<IPadding> createPadding(PaddingMode padding_mode) {
         switch (padding_mode) {
@@ -67,133 +55,186 @@ private:
         }
     }
 
-    void processAdditionalParams(const std::vector<AdditionalParam>& params) {
-        // Обработка дополнительных параметров
-        for (const auto& param : params) {
-            // Можно добавить специфичную логику для разных режимов
-        }
-    }
-
-    void processData(std::vector<uint8_t>& data, bool encrypt) {
+    void processData(uint8_t*& data, size_t& length, bool encrypt) {
         if (encrypt) {
-            padding->apply(data, cipher->blockSize());
-            mode->processBlocks(data, cipher.get(), iv, true);
+            padding->apply(data, length, block_size);
+            mode->processBlocks(data, length, cipher.get(), iv.get(), true);
         } else {
-            mode->processBlocks(data, cipher.get(), iv, false);
-            padding->remove(data, cipher->blockSize());
+            mode->processBlocks(data, length, cipher.get(), iv.get(), false);
+            padding->remove(data, length, block_size);
         }
     }
 
     void processFile(const std::string& input_file, const std::string& output_file, bool encrypt) {
-        std::ifstream in_file(input_file, std::ios::binary);
-        if (!in_file) {
-            throw std::runtime_error("Cannot open input file: " + input_file);
-        }
+        std::ifstream in_file(input_file, std::ios::binary | std::ios::ate);
+        if (!in_file) throw std::runtime_error("Cannot open input file: " + input_file);
 
-        std::vector<uint8_t> data;
-        data.assign(std::istreambuf_iterator<char>(in_file), std::istreambuf_iterator<char>());
+        size_t file_size = static_cast<size_t>(in_file.tellg());
+        in_file.seekg(0, std::ios::beg);
+
+        uint8_t* data = new uint8_t[file_size];
+        in_file.read(reinterpret_cast<char*>(data), file_size);
         in_file.close();
 
-        processData(data, encrypt);
+        // ВАЖНО: указатель по ссылке
+        processData(data, file_size, encrypt);
 
         std::ofstream out_file(output_file, std::ios::binary);
         if (!out_file) {
+            delete[] data;
             throw std::runtime_error("Cannot open output file: " + output_file);
         }
-        out_file.write(reinterpret_cast<const char*>(data.data()), data.size());
+        out_file.write(reinterpret_cast<const char*>(data), file_size);
+        out_file.close();
+
+        delete[] data;
     }
+
 
 public:
     SymmetricCipherContext(
             CipherAlgorithm algorithm,
             CipherMode c_mode,
             PaddingMode p_mode,
-            const std::vector<uint8_t>& key,
-            const std::vector<uint8_t>& initialization_vector = {},
+            const uint8_t* key,
+            size_t key_len,
+            const uint8_t* initialization_vector = nullptr,
+            size_t iv_len = 0,
             const std::vector<AdditionalParam>& additional_params = {}
     ) : byte_order(ByteOrder::BIG_ENDIAN) {
-
-        // Создаем алгоритм
         switch (algorithm) {
             case CipherAlgorithm::DES:
                 cipher = std::make_unique<DES>(byte_order);
                 key_size = 8;
                 break;
             case CipherAlgorithm::DEAL:
-                key_size = key.size();
+                key_size = key_len;
                 cipher = std::make_unique<DEAL>(key_size, byte_order);
                 break;
             default:
                 throw std::invalid_argument("Unsupported cipher algorithm");
         }
 
-        if (key.size() != cipher->keySize()) {
+        if (key_len != cipher->keySize())
             throw std::invalid_argument("Key size doesn't match algorithm requirements");
-        }
-        cipher->setupKeys(key.data(), key.size());
 
-        // Создаем режим шифрования
+        cipher->setupKeys(key, key_len);
+
         mode = createCipherMode(c_mode);
-
-        // Создаем паддинг
         padding = createPadding(p_mode);
 
-        // Устанавливаем IV
-        if (!initialization_vector.empty()) {
-            iv = initialization_vector;
-            if (iv.size() != cipher->blockSize()) {
-                throw std::invalid_argument("IV size doesn't match block size");
+        block_size = cipher->blockSize();
+
+        if (requiresIV(c_mode)) {
+            iv = std::make_unique<uint8_t[]>(block_size);
+            if (initialization_vector && iv_len == block_size) {
+                std::copy(initialization_vector, initialization_vector + block_size, iv.get());
+            } else {
+                std::fill(iv.get(), iv.get() + block_size, 0);
             }
-        } else if (requiresIV(c_mode)) {
-            iv.resize(cipher->blockSize());
-            std::fill(iv.begin(), iv.end(), 0);
         }
-
-        // Обрабатываем дополнительные параметры
-        processAdditionalParams(additional_params);
     }
 
-    // Основные методы - ТОЛЬКО ТО, ЧТО В ЗАДАНИИ
-    void encrypt(const std::vector<uint8_t>& input, std::vector<uint8_t>& output) {
-        output = input; // одно копирование
-        processData(output, true);
+    // Основные методы
+    void encrypt(const uint8_t* input, size_t in_len, uint8_t* output, size_t& out_len) {
+        // рабочий буфер
+        uint8_t* buf = new uint8_t[in_len];
+        std::copy(input, input + in_len, buf);
+
+        size_t len = in_len;
+        processData(buf, len, true);
+
+        std::copy(buf, buf + len, output);
+        out_len = len;
+
+        delete[] buf;
     }
 
-    void decrypt(const std::vector<uint8_t>& input, std::vector<uint8_t>& output) {
-        output = input; // одно копирование
-        processData(output, false);
+    void decrypt(const uint8_t* input, size_t in_len, uint8_t* output, size_t& out_len) {
+        uint8_t* buf = new uint8_t[in_len];
+        std::copy(input, input + in_len, buf);
+
+        size_t len = in_len;
+        processData(buf, len, false);
+
+        std::copy(buf, buf + len, output);
+        out_len = len;
+
+        delete[] buf;
     }
 
-    void encrypt(const std::string& input_file, const std::string& output_file) {
-        processFile(input_file, output_file, true);
+    void encrypt(const std::string& input_file, const std::string& output_file, size_t& out_len) {
+        std::ifstream in_file(input_file, std::ios::binary | std::ios::ate);
+        if (!in_file) throw std::runtime_error("Cannot open input file: " + input_file);
+
+        size_t file_size = static_cast<size_t>(in_file.tellg());
+        in_file.seekg(0, std::ios::beg);
+
+        uint8_t* data = new uint8_t[file_size];
+        in_file.read(reinterpret_cast<char*>(data), file_size);
+        in_file.close();
+
+        processData(data, file_size, true);
+
+        std::ofstream out_file(output_file, std::ios::binary);
+        if (!out_file) {
+            delete[] data;
+            throw std::runtime_error("Cannot open output file: " + output_file);
+        }
+        out_file.write(reinterpret_cast<const char*>(data), file_size);
+        out_file.close();
+
+        out_len = file_size; // записываем фактическую длину
+        delete[] data;
     }
 
-    void decrypt(const std::string& input_file, const std::string& output_file) {
-        processFile(input_file, output_file, false);
+    void decrypt(const std::string& input_file, const std::string& output_file, size_t& out_len) {
+        std::ifstream in_file(input_file, std::ios::binary | std::ios::ate);
+        if (!in_file) throw std::runtime_error("Cannot open input file: " + input_file);
+
+        size_t file_size = static_cast<size_t>(in_file.tellg());
+        in_file.seekg(0, std::ios::beg);
+
+        uint8_t* data = new uint8_t[file_size];
+        in_file.read(reinterpret_cast<char*>(data), file_size);
+        in_file.close();
+
+        processData(data, file_size, false);
+
+        std::ofstream out_file(output_file, std::ios::binary);
+        if (!out_file) {
+            delete[] data;
+            throw std::runtime_error("Cannot open output file: " + output_file);
+        }
+        out_file.write(reinterpret_cast<const char*>(data), file_size);
+        out_file.close();
+
+        out_len = file_size; // записываем фактическую длину
+        delete[] data;
     }
 
-    // Асинхронные версии - ТОЛЬКО ТО, ЧТО В ЗАДАНИИ
-    void encryptAsync(const std::vector<uint8_t>& input, std::vector<uint8_t>& output) {
-        std::thread([this, input, &output]() {
-            this->encrypt(input, output);
+    // Асинхронные версии
+    void encryptAsync(const uint8_t* input, size_t in_len, uint8_t* output, size_t& out_len) {
+        std::thread([this, input, in_len, output, &out_len]() {
+            this->encrypt(input, in_len, output, out_len);
         }).detach();
     }
 
-    void decryptAsync(const std::vector<uint8_t>& input, std::vector<uint8_t>& output) {
-        std::thread([this, input, &output]() {
-            this->decrypt(input, output);
+    void decryptAsync(const uint8_t* input, size_t in_len, uint8_t* output, size_t& out_len) {
+        std::thread([this, input, in_len, output, &out_len]() {
+            this->decrypt(input, in_len, output, out_len);
         }).detach();
     }
 
-    void encryptAsync(const std::string& input_file, const std::string& output_file) {
-        std::thread([this, input_file, output_file]() {
-            this->encrypt(input_file, output_file);
+    void encryptAsync(const std::string& input_file, const std::string& output_file, size_t& out_len) {
+        std::thread([this, input_file, output_file, &out_len]() {
+            this->encrypt(input_file, output_file, out_len);
         }).detach();
     }
 
-    void decryptAsync(const std::string& input_file, const std::string& output_file) {
-        std::thread([this, input_file, output_file]() {
-            this->decrypt(input_file, output_file);
+    void decryptAsync(const std::string& input_file, const std::string& output_file, size_t& out_len) {
+        std::thread([this, input_file, output_file, &out_len]() {
+            this->decrypt(input_file, output_file, out_len);
         }).detach();
     }
 };

@@ -8,7 +8,7 @@ class Feistel_network {
 private:
     std::unique_ptr<IKeyExpansion> key_expansion;
     std::unique_ptr<IEncryptionRound> round_function;
-    uint8_t* round_keys;
+    std::unique_ptr<uint8_t[]> round_keys;
     size_t num_rounds;
     size_t block_size;
     size_t key_size;
@@ -22,67 +22,49 @@ public:
               round_function(std::move(round_function)),
               num_rounds(rounds),
               block_size(blk_size),
-              key_size(k_size) {
-        round_keys = new uint8_t[rounds * k_size];
-    }
-
-    ~Feistel_network() {
-        delete[] round_keys;
-    }
+              key_size(k_size),
+              round_keys(new uint8_t[rounds * k_size]) {}
 
     void en_de_crypt(const uint8_t* block, uint8_t* output, bool encrypt) {
         if (!were_keysSetup) {
             throw std::runtime_error("Keys not setup. Call setupKeys() first.");
         }
-
         if (block_size % 2 != 0) {
             throw std::invalid_argument("Block size must be even");
         }
 
         size_t half_size = block_size / 2;
-        auto* L_prev = new uint8_t[half_size];
-        auto* R_prev = new uint8_t[half_size];
-        auto* temp = new uint8_t[half_size];
-        auto* res_F = new uint8_t[half_size];
+        std::unique_ptr<uint8_t[]> L_prev(new uint8_t[half_size]);
+        std::unique_ptr<uint8_t[]> R_prev(new uint8_t[half_size]);
+        std::unique_ptr<uint8_t[]> temp(new uint8_t[half_size]);
+        std::unique_ptr<uint8_t[]> res_F(new uint8_t[half_size]);
 
-        // Инициализация L и R
-        std::copy(block, block + half_size, L_prev);
-        std::copy(block + half_size, block + block_size, R_prev);
+        std::copy(block, block + half_size, L_prev.get());
+        std::copy(block + half_size, block + block_size, R_prev.get());
 
         for (size_t i = 0; i < num_rounds; i++) {
             size_t round_idx = encrypt ? i : num_rounds - 1 - i;
-            const uint8_t* current_key = round_keys + (round_idx * key_size);
+            const uint8_t* current_key = round_keys.get() + (round_idx * key_size);
 
-            // temp = R_prev
-            std::copy(R_prev, R_prev + half_size, temp);
+            std::copy(R_prev.get(), R_prev.get() + half_size, temp.get());
+            round_function->encryptRound(R_prev.get(), current_key, res_F.get());
 
-            // res_F = F(R_prev, K_cur)
-            round_function->encryptRound(R_prev, current_key, res_F);
-
-            // R_prev = L_prev XOR res_F
             for (size_t j = 0; j < half_size; j++) {
                 R_prev[j] = L_prev[j] ^ res_F[j];
             }
-
-            // L_prev = temp
-            std::copy(temp, temp + half_size, L_prev);
+            std::copy(temp.get(), temp.get() + half_size, L_prev.get());
         }
 
-        // output = R_prev + L_prev
-        std::copy(R_prev, R_prev + half_size, output);
-        std::copy(L_prev, L_prev + half_size, output + half_size);
-
-        delete[] L_prev;
-        delete[] R_prev;
-        delete[] temp;
-        delete[] res_F;
+        std::copy(R_prev.get(), R_prev.get() + half_size, output);
+        std::copy(L_prev.get(), L_prev.get() + half_size, output + half_size);
     }
 
     void setupKeys(const uint8_t* key, size_t key_len) {
         were_keysSetup = true;
-        key_expansion->key_extension(key, key_len, round_keys, num_rounds);
+        key_expansion->key_extension(key, key_len, round_keys.get(), num_rounds);
     }
 };
+
 
 class DESRound : public IEncryptionRound {
 private:
@@ -241,9 +223,8 @@ public:
         P_block(input_key, 8, PC1_C, 28, C, byte_order, StartIndex::ONE);
         P_block(input_key, 8, PC1_D, 28, D, byte_order, StartIndex::ONE);
 
-        uint32_t Ci, Di;
-        std::memcpy(&Ci, C, sizeof(Ci));
-        std::memcpy(&Di, D, sizeof(Di));
+        uint32_t Ci = *(reinterpret_cast<uint32_t*>(C));
+        uint32_t Di = *(reinterpret_cast<uint32_t*>(D));
 
         uint32_t mask = (1u << 28) - 1;
 
@@ -355,44 +336,41 @@ public:
         }
 
         // Разбиваем ключ на части по 8 байт
-        std::vector<std::vector<uint8_t>> key_parts;
+        const uint8_t* parts[4] = { nullptr, nullptr, nullptr, nullptr };
+        size_t parts_count = 0;
 
         if (key_len == 16) {
             // 128-битный ключ: K1, K2, K1, K2
-            key_parts.emplace_back(input_key, input_key + 8);
-            key_parts.emplace_back(input_key + 8, input_key + 16);
-            key_parts.push_back(key_parts[0]);
-            key_parts.push_back(key_parts[1]);
-        }
-        else if (key_len == 24) {
+            parts[0] = input_key;
+            parts[1] = input_key + 8;
+            parts[2] = input_key;       // повтор K1
+            parts[3] = input_key + 8;   // повтор K2
+            parts_count = 4;
+        } else if (key_len == 24) {
             // 192-битный ключ: K1, K2, K3, K1
-            key_parts.emplace_back(input_key, input_key + 8);
-            key_parts.emplace_back(input_key + 8, input_key + 16);
-            key_parts.emplace_back(input_key + 16, input_key + 24);
-            key_parts.push_back(key_parts[0]);
-        }
-        else {
-            // 256-битный ключ: K1, K2, K3, K4
-            key_parts.emplace_back(input_key, input_key + 8);
-            key_parts.emplace_back(input_key + 8, input_key + 16);
-            key_parts.emplace_back(input_key + 16, input_key + 24);
-            key_parts.emplace_back(input_key + 24, input_key + 32);
+            parts[0] = input_key;
+            parts[1] = input_key + 8;
+            parts[2] = input_key + 16;
+            parts[3] = input_key;       // повтор K1
+            parts_count = 4;
+        } else { // 256 бит
+            parts[0] = input_key;
+            parts[1] = input_key + 8;
+            parts[2] = input_key + 16;
+            parts[3] = input_key + 24;
+            parts_count = 4;
         }
 
-        // Генерируем раундовые ключи
-        for (size_t round_num = 0; round_num < rounds; round_num++) {
-            uint8_t* round_key = round_keys + (round_num * 8);
-
-            for (size_t byte_idx = 0; byte_idx < 8; byte_idx++) {
+        // Генерация раундовых ключей
+        for (size_t r = 0; r < rounds; ++r) {
+            uint8_t* rk = round_keys + (r * 8);
+            for (size_t b = 0; b < 8; ++b) {
                 uint8_t val = 0;
-                for (auto& part : key_parts) {
-                    if (byte_idx < part.size()) {
-                        val ^= part[byte_idx];
-                    }
+                for (size_t p = 0; p < parts_count; ++p) {
+                    val ^= parts[p][b]; // XOR всех частей
                 }
-                // Добавляем номер раунда
-                val ^= static_cast<uint8_t>(round_num + 1);
-                round_key[byte_idx] = val;
+                val ^= static_cast<uint8_t>(r + 1); // добавляем номер раунда
+                rk[b] = val;
             }
         }
     }
