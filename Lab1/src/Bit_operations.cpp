@@ -1,10 +1,7 @@
-#include "Interfaces.h"
-#include <bitset>
+#include "Bit_operations.h"
 
 void P_block(const uint8_t* input, size_t input_len, const int* perm_table, size_t table_size,
              uint8_t* output, ByteOrder order = ByteOrder::BIG_ENDIAN, StartIndex start = StartIndex::ZERO) {
-
-
 
     size_t out_bytes = table_size / 8;
 
