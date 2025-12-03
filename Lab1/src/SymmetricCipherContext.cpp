@@ -50,9 +50,9 @@ std::unique_ptr<IPadding> SymmetricCipherContext::createPadding(PaddingMode padd
 void SymmetricCipherContext::processData(uint8_t*& data, size_t& length, bool encrypt) {
     if (encrypt) {
         padding->apply(data, length, block_size);
-        mode->processBlocks(data, length, cipher.get(), iv ? iv.get() : nullptr, true);
+        mode->processBlocks(data, length, cipher.get(), iv ? iv.get() : nullptr, true, user_threads);
     } else {
-        mode->processBlocks(data, length, cipher.get(), iv ? iv.get() : nullptr, false);
+        mode->processBlocks(data, length, cipher.get(), iv ? iv.get() : nullptr, false, user_threads);
         padding->remove(data, length, block_size);
     }
 }
@@ -154,6 +154,10 @@ void SymmetricCipherContext::processAdditionalParams(const std::vector<std::any>
             if (val > 0) user_threads = val;
         }
     }
+}
+
+size_t SymmetricCipherContext::get_user_threads(){
+    return user_threads;
 }
 
 // Основные методы (буферные версии)

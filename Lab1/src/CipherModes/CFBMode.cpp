@@ -6,7 +6,8 @@
 void CFBMode::processBlocks(uint8_t* data, size_t& length,
                             ISymmetricCipher* cipher,
                             const uint8_t* iv,
-                            bool encrypt)
+                            bool encrypt,
+                            size_t /*user_threads*/)
 {
     const size_t block_size = cipher->blockSize();
     if (length % block_size != 0) {
