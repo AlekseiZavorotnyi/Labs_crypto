@@ -22,6 +22,7 @@ void RandomDeltaMode::processBlocks(uint8_t* data, size_t& length,
     size_t threads_to_use = (user_threads > 0) ? user_threads : std::thread::hardware_concurrency();
     if (threads_to_use == 0) threads_to_use = 1;
     const size_t num_threads = std::min(threads_to_use, num_blocks);
+    const size_t blocks_per_thread = (num_blocks + num_threads - 1) / num_threads;
 
     if (num_threads == 1 || num_blocks < 4) {
         uint8_t* delta = new uint8_t[block_size];

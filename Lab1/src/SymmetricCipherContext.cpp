@@ -156,10 +156,6 @@ void SymmetricCipherContext::processAdditionalParams(const std::vector<std::any>
     }
 }
 
-size_t SymmetricCipherContext::get_user_threads(){
-    return user_threads;
-}
-
 // Основные методы (буферные версии)
 void SymmetricCipherContext::encrypt(const uint8_t* input, size_t in_len, uint8_t* output, size_t& out_len) {
     // рабочий буфер: копируем вход ровно один раз
