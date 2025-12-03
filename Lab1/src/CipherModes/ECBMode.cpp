@@ -2,27 +2,33 @@
 #include <memory>
 #include <algorithm>
 #include <iostream>
+#include <vector>
 #include "./CipherModes/ECBMode.h"
 
 // EBCMode implementation
 void ECBMode::processBlocks(uint8_t* data, size_t& length,
                             ISymmetricCipher* cipher,
-                            const uint8_t* /*iv*/,
+                            [[maybe_unused]]const uint8_t* iv,
                             bool encrypt)
 {
     const size_t block_size = cipher->blockSize();
+    if (length % block_size != 0) {
+        throw std::runtime_error("ECB mode requires input length to be multiple of block size");
+    }
     const size_t num_blocks = length / block_size;
-
     if (num_blocks == 0) return;
 
-    const unsigned hw = std::thread::hardware_concurrency();
-    const size_t num_threads = std::max<size_t>(1, std::min<size_t>(hw ? hw : 1, num_blocks));
+    size_t threads_to_use = (user_threads > 0) ? user_threads : std::thread::hardware_concurrency();
+    if (threads_to_use == 0) threads_to_use = 1;
+    const size_t num_threads = std::min(threads_to_use, num_blocks);
+
     const size_t blocks_per_thread = (num_blocks + num_threads - 1) / num_threads;
 
-    std::unique_ptr<std::thread[]> threads(new std::thread[num_threads]);
+    std::vector<std::thread> threads;
+    threads.reserve(num_threads);
 
     for (size_t t = 0; t < num_threads; ++t) {
-        threads[t] = std::thread([=]() {
+        threads.emplace_back([=]() {
             const size_t start_block = t * blocks_per_thread;
             const size_t end_block = std::min((t + 1) * blocks_per_thread, num_blocks);
 
@@ -33,7 +39,8 @@ void ECBMode::processBlocks(uint8_t* data, size_t& length,
             }
         });
     }
-    for (size_t t = 0; t < num_threads; ++t) threads[t].join();
+
+    for (auto& thread : threads) thread.join();
 }
 
 bool ECBMode::canParallelize() const { return true; }

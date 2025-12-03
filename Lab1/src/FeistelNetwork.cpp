@@ -1,4 +1,6 @@
 #include "./FeistelNetwork.h"
+#include <cstring>
+#include <stdexcept>
 
 // Конструктор
 Feistel_network::Feistel_network(std::unique_ptr<IKeyExpansion> key_expansion,
@@ -20,30 +22,39 @@ void Feistel_network::en_de_crypt(const uint8_t* block, uint8_t* output, bool en
         throw std::invalid_argument("Block size must be even");
     }
 
-    size_t half_size = block_size / 2;
-    std::unique_ptr<uint8_t[]> L_prev(new uint8_t[half_size]);
-    std::unique_ptr<uint8_t[]> R_prev(new uint8_t[half_size]);
-    std::unique_ptr<uint8_t[]> temp(new uint8_t[half_size]);
-    std::unique_ptr<uint8_t[]> res_F(new uint8_t[half_size]);
+    const size_t half_size = block_size / 2;
 
-    std::copy(block, block + half_size, L_prev.get());
-    std::copy(block + half_size, block + block_size, R_prev.get());
+    // Выделяем только два рабочих буфера
+    uint8_t* L = new uint8_t[half_size];
+    uint8_t* R = new uint8_t[half_size];
+    uint8_t* F = new uint8_t[half_size];
 
-    for (size_t i = 0; i < num_rounds; i++) {
+    // Инициализация
+    std::memcpy(L, block, half_size);
+    std::memcpy(R, block + half_size, half_size);
+
+    for (size_t i = 0; i < num_rounds; ++i) {
         size_t round_idx = encrypt ? i : num_rounds - 1 - i;
         const uint8_t* current_key = round_keys.get() + (round_idx * key_size);
 
-        std::copy(R_prev.get(), R_prev.get() + half_size, temp.get());
-        round_function->encryptRound(R_prev.get(), current_key, res_F.get());
+        // F(R, K)
+        round_function->encryptRound(R, current_key, F);
 
-        for (size_t j = 0; j < half_size; j++) {
-            R_prev[j] = L_prev[j] ^ res_F[j];
+        // Новый L и R: (L,R) -> (R, L xor F(R,K))
+        for (size_t j = 0; j < half_size; ++j) {
+            uint8_t newR = L[j] ^ F[j];
+            L[j] = R[j];   // старый R становится новым L
+            R[j] = newR;   // новый R
         }
-        std::copy(temp.get(), temp.get() + half_size, L_prev.get());
     }
 
-    std::copy(R_prev.get(), R_prev.get() + half_size, output);
-    std::copy(L_prev.get(), L_prev.get() + half_size, output + half_size);
+    // Собираем результат: (R,L)
+    std::memcpy(output, R, half_size);
+    std::memcpy(output + half_size, L, half_size);
+
+    delete[] L;
+    delete[] R;
+    delete[] F;
 }
 
 // Метод установки ключей

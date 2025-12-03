@@ -10,15 +10,13 @@
 #include <stdexcept>
 #include <iostream>
 #include <vector>
-#include <variant>
+#include <any>
 #include "DES/DES.h"
 #include "DEAL/DEAL.h"
 
 enum class CipherMode { ECB, CBC, PCBC, CFB, OFB, CTR, RANDOM_DELTA };
 enum class PaddingMode { ZEROS, ANSI_X923, PKCS7, ISO_10126 };
 enum class CipherAlgorithm { DES, DEAL };
-
-using AdditionalParam = std::variant<int, std::string, std::unique_ptr<uint8_t[]>>;
 
 class SymmetricCipherContext {
 private:
@@ -29,12 +27,14 @@ private:
     ByteOrder byte_order;
     size_t key_size;
     size_t block_size;
+    size_t user_threads = 0;
 
     std::unique_ptr<ICipherMode> createCipherMode(CipherMode mode);
     bool requiresIV(CipherMode mode) const;
     std::unique_ptr<IPadding> createPadding(PaddingMode padding_mode);
     void processData(uint8_t*& data, size_t& length, bool encrypt);
     void processFile(const std::string& input_file, const std::string& output_file, bool encrypt);
+    void processAdditionalParams(const std::vector<std::any>& params);
 
 public:
     SymmetricCipherContext(
@@ -45,7 +45,7 @@ public:
             size_t key_len,
             const uint8_t* initialization_vector = nullptr,
             size_t iv_len = 0,
-            const std::vector<AdditionalParam>& additional_params = {}
+            const std::vector<std::any>& additionalParams = {}
     );
 
     // Основные методы

@@ -5,7 +5,7 @@
 
 int main() {
     uint8_t key[8] = {10, 23, 54, 3, 124, 43, 76, 255};
-    uint8_t iv[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    const uint8_t iv[8] = {1, 2, 3, 4, 5, 6, 7, 8};
 
     const char* text = "Hello world!!!";
     size_t in_len = strlen(text);
@@ -18,7 +18,7 @@ int main() {
 
     SymmetricCipherContext ctx(
             CipherAlgorithm::DES,
-            CipherMode::CTR,
+            CipherMode::CFB,
             PaddingMode::PKCS7,
             key, 8, iv, 8
     );

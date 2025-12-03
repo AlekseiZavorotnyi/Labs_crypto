@@ -1,15 +1,27 @@
 #include "./PaddingModes/PKCS7Padding.h"
+#include <stdexcept>
+#include <cstring>
 
 void PKCS7Padding::apply(uint8_t*& data, size_t& length, size_t block_size) {
     size_t rem = length % block_size;
     size_t padding_size = (rem == 0) ? block_size : (block_size - rem);
 
-    std::unique_ptr<uint8_t[]> new_data(new uint8_t[length + padding_size]);
-    std::copy(data, data + length, new_data.get());
-    std::fill(new_data.get() + length, new_data.get() + length + padding_size,
-              static_cast<uint8_t>(padding_size));
+    // Новый буфер с учётом паддинга
+    uint8_t* new_data = new uint8_t[length + padding_size];
 
-    data = new_data.release();
+    // Копируем старые данные
+    if (length > 0) {
+        std::memcpy(new_data, data, length);
+    }
+
+    // Заполняем паддинг
+    std::memset(new_data + length, static_cast<int>(padding_size), padding_size);
+
+    // Освобождаем старый буфер
+    delete[] data;
+
+    // Обновляем указатель и длину
+    data = new_data;
     length += padding_size;
 }
 
@@ -17,13 +29,17 @@ void PKCS7Padding::remove(uint8_t* data, size_t& length, size_t block_size) {
     if (length == 0) return;
 
     size_t padding_size = data[length - 1];
-    if (padding_size == 0 || padding_size > block_size || padding_size > length)
+    if (padding_size == 0 || padding_size > block_size || padding_size > length) {
         throw std::runtime_error("Invalid PKCS7 padding");
-
-    for (size_t i = length - padding_size; i < length; ++i) {
-        if (data[i] != padding_size)
-            throw std::runtime_error("Invalid PKCS7 padding - inconsistent padding bytes");
     }
 
+    // Проверяем, что все байты паддинга совпадают
+    for (size_t i = length - padding_size; i < length; ++i) {
+        if (data[i] != padding_size) {
+            throw std::runtime_error("Invalid PKCS7 padding - inconsistent padding bytes");
+        }
+    }
+
+    // Просто уменьшаем длину (буфер остаётся тем же)
     length -= padding_size;
 }

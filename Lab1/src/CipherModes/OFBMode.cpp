@@ -1,32 +1,36 @@
-#include <thread>
-#include <memory>
-#include <algorithm>
 #include "./CipherModes/OFBMode.h"
+#include <cstring>
+#include <stdexcept>
 
-// OFBMode implementation
 void OFBMode::processBlocks(uint8_t* data, size_t& length,
                             ISymmetricCipher* cipher,
                             const uint8_t* iv,
                             bool /*encrypt*/)
 {
     const size_t block_size = cipher->blockSize();
+    if (length % block_size != 0) {
+        throw std::runtime_error("OFB expects length multiple of block size when padding is enforced");
+    }
+
     const size_t num_blocks = length / block_size;
     if (num_blocks == 0) return;
+    if (!iv) throw std::runtime_error("OFB requires non-null IV");
 
-    std::unique_ptr<uint8_t[]> stream(new uint8_t[block_size]);
-    std::unique_ptr<uint8_t[]> next_stream(new uint8_t[block_size]);
-    std::copy(iv, iv + block_size, stream.get());
+    uint8_t* stream = new uint8_t[block_size];
+    uint8_t* next   = new uint8_t[block_size];
+    std::memcpy(stream, iv, block_size);
 
     for (size_t i = 0; i < num_blocks; ++i) {
+        cipher->encrypt(stream, next);
         uint8_t* block = data + i * block_size;
-
-        cipher->encrypt(stream.get(), next_stream.get());
-
-        for (size_t j = 0; j < block_size; ++j)
-            block[j] ^= next_stream[j];
-
-        std::copy(next_stream.get(), next_stream.get() + block_size, stream.get());
+        for (size_t j = 0; j < block_size; ++j) {
+            block[j] ^= next[j];
+        }
+        std::memcpy(stream, next, block_size);
     }
+
+    delete[] stream;
+    delete[] next;
 }
 
 bool OFBMode::canParallelize() const { return false; }
