@@ -4,8 +4,8 @@
 #include <cstring>
 
 int main() {
-    uint8_t key[8] = {10, 23, 54, 3, 124, 43, 76, 255};
-    const uint8_t iv[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    uint8_t key[16] = {10, 23, 54, 3, 124, 43, 76, 255, 10, 23, 54, 3, 124, 43, 76, 255};
+    const uint8_t iv[16] = {1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8};
 
     const char* text = "Hello world!!!";
     size_t in_len = strlen(text);
@@ -17,10 +17,10 @@ int main() {
     size_t out_len = 0; // переменная для длины
 
     SymmetricCipherContext ctx(
-            CipherAlgorithm::DES,
-            CipherMode::PCBC,
+            CipherAlgorithm::DEAL,
+            CipherMode::ECB,
             PaddingMode::PKCS7,
-            key, 8, iv, 8
+            key, 16, iv, 16
     );
     /*std::cout << "Encrypted length: " << in_len << "\n";
     ctx.encrypt(plain, in_len, encrypted, out_len);

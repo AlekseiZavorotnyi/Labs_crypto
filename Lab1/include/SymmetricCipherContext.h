@@ -54,11 +54,4 @@ public:
 
     void encrypt(const std::string& input_file, const std::string& output_file, size_t& out_len);
     void decrypt(const std::string& input_file, const std::string& output_file, size_t& out_len);
-
-    // Асинхронные версии
-    void encryptAsync(const uint8_t* input, size_t in_len, uint8_t* output, size_t& out_len);
-    void decryptAsync(const uint8_t* input, size_t in_len, uint8_t* output, size_t& out_len);
-
-    void encryptAsync(const std::string& input_file, const std::string& output_file, size_t& out_len);
-    void decryptAsync(const std::string& input_file, const std::string& output_file, size_t& out_len);
 };

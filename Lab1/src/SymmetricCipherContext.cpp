@@ -50,51 +50,18 @@ std::unique_ptr<IPadding> SymmetricCipherContext::createPadding(PaddingMode padd
 void SymmetricCipherContext::processData(uint8_t*& data, size_t& length, bool encrypt) {
     if (encrypt) {
         padding->apply(data, length, block_size);
+        for (size_t i = 0; i < 32; ++i) {
+            std::cout << std::hex << (int)data[i] << " ";
+        }
+        std::cout << "\n";
         mode->processBlocks(data, length, cipher.get(), iv ? iv.get() : nullptr, true, user_threads);
+        /*for (size_t i = 0; i < 32; ++i) {
+            std::cout << std::hex << (int)data[i] << " ";
+        }*/
     } else {
         mode->processBlocks(data, length, cipher.get(), iv ? iv.get() : nullptr, false, user_threads);
         padding->remove(data, length, block_size);
     }
-}
-
-// Обработка файла целиком (корректно учитываем изменившуюся длину после паддинга/снятия)
-void SymmetricCipherContext::processFile(const std::string& input_file, const std::string& output_file, bool encrypt) {
-    std::ifstream in_file(input_file, std::ios::binary | std::ios::ate);
-    if (!in_file) throw std::runtime_error("Cannot open input file: " + input_file);
-
-    size_t file_size = static_cast<size_t>(in_file.tellg());
-    in_file.seekg(0, std::ios::beg);
-
-    uint8_t* data = nullptr;
-    if (file_size > 0) {
-        data = new uint8_t[file_size];
-        in_file.read(reinterpret_cast<char*>(data), file_size);
-        if (!in_file) {
-            delete[] data;
-            throw std::runtime_error("Failed to read input file: " + input_file);
-        }
-    }
-    in_file.close();
-
-    // ВАЖНО: length может измениться после паддинга/снятия
-    size_t length = file_size;
-    processData(data, length, encrypt);
-
-    std::ofstream out_file(output_file, std::ios::binary);
-    if (!out_file) {
-        delete[] data;
-        throw std::runtime_error("Cannot open output file: " + output_file);
-    }
-    if (length > 0 && data) {
-        out_file.write(reinterpret_cast<const char*>(data), length);
-        if (!out_file) {
-            delete[] data;
-            throw std::runtime_error("Failed to write output file: " + output_file);
-        }
-    }
-    out_file.close();
-
-    delete[] data;
 }
 
 // Конструктор
@@ -272,30 +239,4 @@ void SymmetricCipherContext::decrypt(const std::string& input_file, const std::s
 
     out_len = length;
     delete[] data;
-}
-
-// Асинхронные версии (оставлены как есть в заголовке, при необходимости смени на std::future)
-// Внимание: текущая реализация с detach требует, чтобы вызывающий гарантировал время жизни output и out_len.
-void SymmetricCipherContext::encryptAsync(const uint8_t* input, size_t in_len, uint8_t* output, size_t& out_len) {
-    std::thread([this, input, in_len, output, &out_len]() {
-        this->encrypt(input, in_len, output, out_len);
-    }).detach();
-}
-
-void SymmetricCipherContext::decryptAsync(const uint8_t* input, size_t in_len, uint8_t* output, size_t& out_len) {
-    std::thread([this, input, in_len, output, &out_len]() {
-        this->decrypt(input, in_len, output, out_len);
-    }).detach();
-}
-
-void SymmetricCipherContext::encryptAsync(const std::string& input_file, const std::string& output_file, size_t& out_len) {
-    std::thread([this, input_file, output_file, &out_len]() {
-        this->encrypt(input_file, output_file, out_len);
-    }).detach();
-}
-
-void SymmetricCipherContext::decryptAsync(const std::string& input_file, const std::string& output_file, size_t& out_len) {
-    std::thread([this, input_file, output_file, &out_len]() {
-        this->decrypt(input_file, output_file, out_len);
-    }).detach();
 }

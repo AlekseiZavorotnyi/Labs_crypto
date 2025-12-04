@@ -1,6 +1,7 @@
 #include "./PaddingModes/PKCS7Padding.h"
 #include <stdexcept>
 #include <cstring>
+#include <iostream>
 
 void PKCS7Padding::apply(uint8_t*& data, size_t& length, size_t block_size) {
     size_t rem = length % block_size;
@@ -23,11 +24,11 @@ void PKCS7Padding::apply(uint8_t*& data, size_t& length, size_t block_size) {
     // Обновляем указатель и длину
     data = new_data;
     length += padding_size;
+    std::cout << "data[length - 1] = " << static_cast<int>(data[length - 1]) << "\n";
 }
 
 void PKCS7Padding::remove(uint8_t* data, size_t& length, size_t block_size) {
     if (length == 0) return;
-
     size_t padding_size = data[length - 1];
     if (padding_size == 0 || padding_size > block_size || padding_size > length) {
         throw std::runtime_error("Invalid PKCS7 padding");

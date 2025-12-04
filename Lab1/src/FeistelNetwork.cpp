@@ -11,7 +11,7 @@ Feistel_network::Feistel_network(std::unique_ptr<IKeyExpansion> key_expansion,
           num_rounds(rounds),
           block_size(blk_size),
           key_size(k_size),
-          round_keys(new uint8_t[rounds * k_size]) {}
+          round_keys(std::unique_ptr<uint8_t[]>(new uint8_t[rounds * k_size])) {}
 
 // Метод шифрования/расшифрования
 void Feistel_network::en_de_crypt(const uint8_t* block, uint8_t* output, bool encrypt) {

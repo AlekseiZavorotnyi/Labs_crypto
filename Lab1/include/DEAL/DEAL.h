@@ -4,12 +4,14 @@
 #include "Interfaces/ISymmetricCipher.h"
 #include "DEAL/DEALRound.h"
 #include "DEAL/DEALKeyExpansion.h"
+#include <vector>
 
 class DEAL : public ISymmetricCipher {
 private:
     ByteOrder byte_order;
     size_t actual_key_size;
     Feistel_network feistel;
+    std::vector<uint8_t> user_key;
 
 public:
     explicit DEAL(size_t key_size = 16, ByteOrder byte_order = ByteOrder::BIG_ENDIAN);
