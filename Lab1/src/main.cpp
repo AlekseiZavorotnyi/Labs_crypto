@@ -3,6 +3,7 @@
 #include <string>
 #include <cstring>
 
+
 void test1(SymmetricCipherContext& ctx){
     size_t out_len = 0;
     ctx.encrypt("./img.png", "./img1.png", out_len);
@@ -47,7 +48,7 @@ int main() {
             CipherAlgorithm::DES,
             CipherMode::CBC,
             PaddingMode::PKCS7,
-            key_DES, 8, iv_DES, 8
+            key_DES, 8, iv_DES, 8, std::vector<std::any> {std::any(7)}
     );
 
     SymmetricCipherContext ctx_DEAL(
@@ -65,7 +66,7 @@ int main() {
     );
     // Шифрование картинки
 
-    test1(ctx_DEAL_24);
+    test1(ctx_DES);
 
     //test2(ctx_DEAL);
 
