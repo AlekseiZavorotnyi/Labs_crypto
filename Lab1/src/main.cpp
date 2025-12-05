@@ -36,6 +36,9 @@ int main() {
     uint8_t key_DEAL[16] = {10, 23, 54, 3, 124, 43, 76, 255, 10, 23, 54, 3, 124, 43, 76, 255};
     const uint8_t iv_DEAL[16] = {1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8};
 
+    uint8_t key_DEAL_24[24] = {10, 23, 54, 3, 124, 43, 76, 255, 10, 23, 54, 3, 124, 43, 76, 255, 10, 23, 54, 3, 124, 43, 76, 255};
+    const uint8_t iv_DEAL_24[24] = {1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8};
+
     uint8_t key_DES[8] = {10, 23, 54, 3, 124, 43, 76, 255};
     const uint8_t iv_DES[8] = {1, 2, 3, 4, 5, 6, 7, 8};
 
@@ -53,9 +56,16 @@ int main() {
             PaddingMode::PKCS7,
             key_DEAL, 16, iv_DEAL, 16
     );
+
+    SymmetricCipherContext ctx_DEAL_24(
+            CipherAlgorithm::DEAL,
+            CipherMode::CBC,
+            PaddingMode::PKCS7,
+            key_DEAL_24, 24, iv_DEAL_24, 24
+    );
     // Шифрование картинки
 
-    test1(ctx_DEAL);
+    test1(ctx_DEAL_24);
 
     //test2(ctx_DEAL);
 
