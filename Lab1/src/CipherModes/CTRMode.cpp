@@ -5,8 +5,7 @@
 #include <cstring>
 #include <stdexcept>
 
-static void addToCounter(uint8_t* counter, size_t counter_len, size_t add) {
-    // counter := counter + add (big-endian)
+void CTRMode::addToCounter(uint8_t* counter, size_t counter_len, size_t add) {
     size_t carry = add;
     for (size_t k = 0; k < counter_len && carry > 0; ++k) {
         size_t pos = counter_len - 1 - k;
@@ -14,7 +13,6 @@ static void addToCounter(uint8_t* counter, size_t counter_len, size_t add) {
         counter[pos] = static_cast<uint8_t>(sum & 0xFF);
         carry >>= 8;
         if (sum > 0xFF && pos > 0) {
-            // инкремент по переносу
             size_t p = pos - 1;
             while (true) {
                 unsigned val = counter[p] + 1;
