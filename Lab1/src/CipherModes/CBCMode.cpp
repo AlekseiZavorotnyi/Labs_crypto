@@ -26,13 +26,17 @@ void CBCMode::processBlocks(uint8_t* data, size_t& length,
         uint8_t* block = data + i * block_size;
 
         if (encrypt) {
-            for (size_t j = 0; j < block_size; ++j) block[j] ^= prev[j];
+            for (size_t j = 0; j < block_size; ++j) {
+                block[j] ^= prev[j];
+            }
             cipher->encrypt(block, block);
             std::memcpy(prev, block, block_size);
         } else {
             std::memcpy(tmpC, block, block_size);
             cipher->decrypt(block, block);
-            for (size_t j = 0; j < block_size; ++j) block[j] ^= prev[j];
+            for (size_t j = 0; j < block_size; ++j) {
+                block[j] ^= prev[j];
+            }
             std::memcpy(prev, tmpC, block_size);
         }
     }

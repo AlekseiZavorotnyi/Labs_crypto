@@ -57,9 +57,7 @@ int main() {
 
     test1(ctx_DEAL);
 
-    // Шифрование текста
-
-    test2(ctx_DEAL);
+    //test2(ctx_DEAL);
 
     return 0;
 }
