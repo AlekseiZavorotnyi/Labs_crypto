@@ -13,11 +13,9 @@ void ISO10126Padding::apply(uint8_t*& data, size_t& length, size_t block_size) {
         std::memcpy(new_data, data, length);
     }
 
-    // Заполняем случайными байтами все кроме последнего
     for (size_t i = length; i < length + padding_size - 1; ++i) {
         new_data[i] = static_cast<uint8_t>(std::rand() % 256);
     }
-    // Последний байт = размер паддинга
     new_data[length + padding_size - 1] = static_cast<uint8_t>(padding_size);
 
     delete[] data;
@@ -33,6 +31,5 @@ void ISO10126Padding::remove(uint8_t* data, size_t& length, size_t block_size) {
         throw std::runtime_error("Invalid ISO 10126 padding");
     }
 
-    // Случайные байты не проверяются, просто уменьшаем длину
     length -= padding_size;
 }

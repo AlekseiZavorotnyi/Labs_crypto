@@ -18,7 +18,7 @@ int main() {
 
     SymmetricCipherContext ctx(
             CipherAlgorithm::DEAL,
-            CipherMode::ECB,
+            CipherMode::CBC,
             PaddingMode::PKCS7,
             key, 16, iv, 16
     );

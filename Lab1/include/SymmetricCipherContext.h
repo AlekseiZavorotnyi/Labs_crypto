@@ -33,7 +33,6 @@ private:
     bool requiresIV(CipherMode mode) const;
     std::unique_ptr<IPadding> createPadding(PaddingMode padding_mode);
     void processData(uint8_t*& data, size_t& length, bool encrypt);
-    void processFile(const std::string& input_file, const std::string& output_file, bool encrypt);
     void processAdditionalParams(const std::vector<std::any>& params);
 
 public:

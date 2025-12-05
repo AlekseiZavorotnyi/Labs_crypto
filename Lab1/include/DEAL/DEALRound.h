@@ -4,7 +4,6 @@
 
 class DEALRound : public IEncryptionRound {
 private:
-    DESAdapter des_adapter_;
     ByteOrder byte_order;
 
     void modifyKey(const uint8_t* originalKey, uint8_t modifier, uint8_t* modifiedKey);

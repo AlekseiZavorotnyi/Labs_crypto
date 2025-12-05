@@ -5,7 +5,6 @@ void P_block(const uint8_t* input, size_t input_len, const int* perm_table, size
 
     size_t out_bytes = table_size / 8;
 
-    // Очищаем выходной буфер
     for (size_t i = 0; i < out_bytes; i++) {
         output[i] = 0;
     }

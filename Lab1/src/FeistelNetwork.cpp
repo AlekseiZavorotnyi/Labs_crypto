@@ -13,7 +13,6 @@ Feistel_network::Feistel_network(std::unique_ptr<IKeyExpansion> key_expansion,
           key_size(k_size),
           round_keys(std::unique_ptr<uint8_t[]>(new uint8_t[rounds * k_size])) {}
 
-// Метод шифрования/расшифрования
 void Feistel_network::en_de_crypt(const uint8_t* block, uint8_t* output, bool encrypt) {
     if (!were_keysSetup) {
         throw std::runtime_error("Keys not setup. Call setupKeys() first.");
@@ -57,7 +56,6 @@ void Feistel_network::en_de_crypt(const uint8_t* block, uint8_t* output, bool en
     delete[] F;
 }
 
-// Метод установки ключей
 void Feistel_network::setupKeys(const uint8_t* key, size_t key_len) {
     were_keysSetup = true;
     key_expansion->key_extension(key, key_len, round_keys.get(), num_rounds);

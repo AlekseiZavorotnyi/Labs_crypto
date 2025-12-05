@@ -5,7 +5,7 @@
 #include <cstring>
 #include <stdexcept>
 
-static inline void addToCounterRange(uint8_t* counter, size_t counter_len, size_t add) {
+static void addToCounter(uint8_t* counter, size_t counter_len, size_t add) {
     // counter := counter + add (big-endian)
     size_t carry = add;
     for (size_t k = 0; k < counter_len && carry > 0; ++k) {
@@ -52,7 +52,7 @@ void CTRMode::processBlocks(uint8_t* data, size_t& length,
         std::memcpy(counter, iv, block_size);
 
         for (size_t i = 0; i < num_blocks; ++i) {
-            addToCounterRange(counter, block_size, 1); // IV+1, IV+2, ...
+            addToCounter(counter, block_size, 1);
             cipher->encrypt(counter, ks);
             uint8_t* block = data + i * block_size;
             for (size_t j = 0; j < block_size; ++j) block[j] ^= ks[j];
@@ -74,12 +74,10 @@ void CTRMode::processBlocks(uint8_t* data, size_t& length,
             const size_t start = t * blocks_per_thread;
             const size_t end   = std::min((t + 1) * blocks_per_thread, num_blocks);
 
-            // counter := iv + start (сдвиг для стартового блока потока)
-            addToCounterRange(counter, block_size, start);
+            addToCounter(counter, block_size, start);
 
             for (size_t i = start; i < end; ++i) {
-                // для каждого блока: counter := counter + 1
-                addToCounterRange(counter, block_size, 1);
+                addToCounter(counter, block_size, 1);
                 cipher->encrypt(counter, ks);
 
                 uint8_t* block = data + i * block_size;

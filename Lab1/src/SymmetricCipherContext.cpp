@@ -50,14 +50,7 @@ std::unique_ptr<IPadding> SymmetricCipherContext::createPadding(PaddingMode padd
 void SymmetricCipherContext::processData(uint8_t*& data, size_t& length, bool encrypt) {
     if (encrypt) {
         padding->apply(data, length, block_size);
-        for (size_t i = 0; i < 32; ++i) {
-            std::cout << std::hex << (int)data[i] << " ";
-        }
-        std::cout << "\n";
         mode->processBlocks(data, length, cipher.get(), iv ? iv.get() : nullptr, true, user_threads);
-        /*for (size_t i = 0; i < 32; ++i) {
-            std::cout << std::hex << (int)data[i] << " ";
-        }*/
     } else {
         mode->processBlocks(data, length, cipher.get(), iv ? iv.get() : nullptr, false, user_threads);
         padding->remove(data, length, block_size);
@@ -107,7 +100,7 @@ SymmetricCipherContext::SymmetricCipherContext(
             std::memset(iv.get(), 0, block_size);
         }
     } else {
-        iv.reset(); // для ECB IV не нужно
+        iv.reset();
     }
 }
 
@@ -123,9 +116,7 @@ void SymmetricCipherContext::processAdditionalParams(const std::vector<std::any>
     }
 }
 
-// Основные методы (буферные версии)
 void SymmetricCipherContext::encrypt(const uint8_t* input, size_t in_len, uint8_t* output, size_t& out_len) {
-    // рабочий буфер: копируем вход ровно один раз
     uint8_t* buf = nullptr;
     if (in_len > 0) {
         buf = new uint8_t[in_len];
@@ -135,7 +126,6 @@ void SymmetricCipherContext::encrypt(const uint8_t* input, size_t in_len, uint8_
     size_t len = in_len;
     processData(buf, len, true);
 
-    // ВНИМАНИЕ: вызывающий должен выделить output >= in_len + block_size
     if (len > 0) {
         std::memcpy(output, buf, len);
     }
@@ -162,7 +152,6 @@ void SymmetricCipherContext::decrypt(const uint8_t* input, size_t in_len, uint8_
     delete[] buf;
 }
 
-// Файловые версии
 void SymmetricCipherContext::encrypt(const std::string& input_file, const std::string& output_file, size_t& out_len) {
     std::ifstream in_file(input_file, std::ios::binary | std::ios::ate);
     if (!in_file) throw std::runtime_error("Cannot open input file: " + input_file);

@@ -17,47 +17,38 @@ void PCBCMode::processBlocks(uint8_t* data, size_t& length,
     if (num_blocks == 0) return;
     if (!iv) throw std::runtime_error("PCBC requires non-null IV");
 
-    // prev_cipher = IV, prev_plain = 0
     uint8_t* prev_cipher = new uint8_t[block_size];
     uint8_t* prev_plain  = new uint8_t[block_size];
     std::memcpy(prev_cipher, iv, block_size);
     std::memset(prev_plain, 0, block_size);
 
-    uint8_t* tmp   = new uint8_t[block_size]; // для сохранения P_i или C_i
-    uint8_t* mixed = new uint8_t[block_size]; // для промежуточных вычислений
+    uint8_t* tmp   = new uint8_t[block_size];
+    uint8_t* mixed = new uint8_t[block_size];
 
     for (size_t i = 0; i < num_blocks; ++i) {
         uint8_t* block = data + i * block_size;
 
         if (encrypt) {
-            // Сохраняем P_i
             std::memcpy(tmp, block, block_size);
 
-            // X = P_i xor C_{i-1} xor P_{i-1}
             for (size_t j = 0; j < block_size; ++j) {
                 mixed[j] = tmp[j] ^ prev_cipher[j] ^ prev_plain[j];
             }
 
-            // C_i = E(X)
             cipher->encrypt(mixed, block);
 
-            // prev_plain := P_i ; prev_cipher := C_i
             std::memcpy(prev_plain, tmp,   block_size);
             std::memcpy(prev_cipher, block, block_size);
 
         } else {
-            // Сохраняем C_i
             std::memcpy(tmp, block, block_size);
 
-            // P' = D(C_i)
             cipher->decrypt(block, mixed);
 
-            // P_i = P' xor C_{i-1} xor P_{i-1}
             for (size_t j = 0; j < block_size; ++j) {
                 block[j] = mixed[j] ^ prev_cipher[j] ^ prev_plain[j];
             }
 
-            // prev_plain := P_i ; prev_cipher := C_i
             std::memcpy(prev_plain, block, block_size);
             std::memcpy(prev_cipher, tmp,  block_size);
         }
