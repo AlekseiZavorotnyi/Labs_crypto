@@ -2,7 +2,7 @@
 #include <iostream>
 #include <string>
 #include <cstring>
-
+#include <cstdint>
 
 void test1(SymmetricCipherContext& ctx){
     size_t out_len = 0;
@@ -33,7 +33,7 @@ void test2(SymmetricCipherContext& ctx){
     std::cout << "Recovered: " << recovered << "\n";
 }
 
-int main() {
+SymmetricCipherContext create_cipher(){
     uint8_t key_DEAL[16] = {10, 23, 54, 3, 124, 43, 76, 255, 10, 23, 54, 3, 124, 43, 76, 255};
     const uint8_t iv_DEAL[16] = {1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8};
 
@@ -64,11 +64,9 @@ int main() {
             PaddingMode::PKCS7,
             key_DEAL_24, 24, iv_DEAL_24, 24
     );
-    // Шифрование картинки
+    return ctx_DES;
+}
 
-    test1(ctx_DES);
-
-    //test2(ctx_DEAL);
-
+int main(){
     return 0;
 }

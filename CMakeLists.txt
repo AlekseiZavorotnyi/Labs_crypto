@@ -18,10 +18,12 @@ add_library(crypto_core STATIC ${SRC_FILES})
 target_include_directories(crypto_core PUBLIC ${CMAKE_SOURCE_DIR}/Lab1/include)
 
 # Основной исполняемый файл
-add_executable(crypt_main ${CMAKE_SOURCE_DIR}/Lab1/src/main.cpp)
+add_executable(main1 ${CMAKE_SOURCE_DIR}/Lab1/src/main1.cpp)
+add_executable(main2 ${CMAKE_SOURCE_DIR}/Lab1/src/main2.cpp)
 
 # Линкуем с нашей библиотекой
-target_link_libraries(crypt_main PRIVATE crypto_core)
+target_link_libraries(main1 PRIVATE crypto_core)
+target_link_libraries(main2 PRIVATE crypto_core)
 
 # Дополнительно: включаем предупреждения
 if (MSVC)
