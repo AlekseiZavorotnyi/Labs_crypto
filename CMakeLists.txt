@@ -3,90 +3,126 @@ project(Labs_crypto)
 
 set(CMAKE_CXX_STANDARD 20)
 
-find_path(GMP_INCLUDE_DIR gmp.h
-        PATHS
-        /usr/include
-        /usr/local/include
-        /opt/local/include
-        /usr/include/x86_64-linux-gnu
+# Сообщение о конфигурации
+message(STATUS "Configuring Crypto Labs project with GMP...")
+message(STATUS "Project source dir: ${CMAKE_SOURCE_DIR}")
+
+# Находим все исходные файлы (исключая временные build файлы)
+file(GLOB_RECURSE ALL_SOURCES CONFIGURE_DEPENDS
+        ${CMAKE_SOURCE_DIR}/Lab1/src/*.cpp
+        ${CMAKE_SOURCE_DIR}/Lab1/src/*/*.cpp
+        ${CMAKE_SOURCE_DIR}/Lab1/src/*/*/*.cpp
 )
 
-# Ищем библиотеки GMP (основная и C++)
-find_library(GMP_LIBRARY NAMES gmp
-        PATHS
-        /usr/lib
-        /usr/lib64
-        /usr/local/lib
-        /opt/local/lib
-        /usr/lib/x86_64-linux-gnu
-)
+# Исключаем файлы из build директорий
+list(FILTER ALL_SOURCES EXCLUDE REGEX ".*cmake-build.*")
+list(FILTER ALL_SOURCES EXCLUDE REGEX ".*build.*")
 
-find_library(GMPXX_LIBRARY NAMES gmpxx
-        PATHS
-        /usr/lib
-        /usr/lib64
-        /usr/local/lib
-        /opt/local/lib
-        /usr/lib/x86_64-linux-gnu
-)
+# Отладочная информация
+message(STATUS "Found ${ALL_SOURCES} source files:")
+foreach(src ${ALL_SOURCES})
+    message(STATUS "  ${src}")
+endforeach()
 
-# Проверяем, что всё найдено
-if(NOT GMP_INCLUDE_DIR)
-    message(FATAL_ERROR "GMP header (gmp.h) not found! Install with: sudo apt install libgmp-dev")
-endif()
+# Разделяем на библиотечные файлы и main файлы
+set(LIB_SOURCES)
+set(MAIN_SOURCES)
 
-if(NOT GMP_LIBRARY)
-    message(FATAL_ERROR "GMP library (libgmp) not found!")
-endif()
+foreach(src ${ALL_SOURCES})
+    get_filename_component(FNAME ${src} NAME)
+    if(FNAME MATCHES "^main_.*\\.cpp$")
+        list(APPEND MAIN_SOURCES ${src})
+        message(STATUS "Main file: ${src}")
+    else()
+        list(APPEND LIB_SOURCES ${src})
+    endif()
+endforeach()
 
-if(NOT GMPXX_LIBRARY)
-    message(WARNING "GMP C++ library (libgmpxx) not found. Install with: sudo apt install libgmpxx4-dev")
-    # Можно работать без C++ интерфейса, но лучше установить
-endif()
+# Создаем статическую библиотеку из всех не-main файлов
+if(LIB_SOURCES)
+    add_library(crypto_core STATIC ${LIB_SOURCES})
 
-message(STATUS "Found GMP include dir: ${GMP_INCLUDE_DIR}")
-message(STATUS "Found GMP library: ${GMP_LIBRARY}")
-message(STATUS "Found GMPXX library: ${GMPXX_LIBRARY}")
+    # Указываем все include директории
+    target_include_directories(crypto_core PUBLIC
+            ${CMAKE_SOURCE_DIR}/Lab1/include
+            ${CMAKE_SOURCE_DIR}/Lab1/include/CipherModes
+            ${CMAKE_SOURCE_DIR}/Lab1/include/DEAL
+            ${CMAKE_SOURCE_DIR}/Lab1/include/DES
+            ${CMAKE_SOURCE_DIR}/Lab1/include/Interfaces
+            ${CMAKE_SOURCE_DIR}/Lab1/include/PaddingModes
+            ${CMAKE_SOURCE_DIR}/Lab1/include/RSA
+    )
 
-# ========== ТВОЙ ОРИГИНАЛЬНЫЙ КОД ==========
+    # Связываем с GMP
+    target_link_libraries(crypto_core PRIVATE gmp gmpxx)
 
-# Пути к заголовочным файлам
-include_directories(
-        ${CMAKE_SOURCE_DIR}/include
-        ${GMP_INCLUDE_DIR}  # Добавляем заголовки GMP
-)
+    # Опции компиляции
+    target_compile_options(crypto_core PRIVATE
+            -Wall -Wextra -pedantic -Werror
+    )
 
-# Соберём список всех исходников рекурсивно
-file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
-        ${CMAKE_SOURCE_DIR}/src/*.cpp
-)
-
-# Создаём статическую библиотеку
-add_library(crypto_core STATIC ${SRC_FILES})
-
-# Указываем include-директории для библиотеки
-target_include_directories(crypto_core PUBLIC
-        ${CMAKE_SOURCE_DIR}/include
-        ${GMP_INCLUDE_DIR}
-)
-
-# Связываем GMP с нашей библиотекой
-target_link_libraries(crypto_core PRIVATE
-        ${GMP_LIBRARY}
-        ${GMPXX_LIBRARY}  # C++ интерфейс
-)
-
-# Основной исполняемый файл
-add_executable(lab1 ${CMAKE_SOURCE_DIR}/src/main_lab1.cpp)
-add_executable(lab2 ${CMAKE_SOURCE_DIR}/src/main_lab2.cpp)
-
-# Линкуем с нашей библиотекой
-target_link_libraries(lab1 PRIVATE crypto_core)
-target_link_libraries(lab2 PRIVATE crypto_core)
-
-# Дополнительно: включаем предупреждения
-if (MSVC)
-    target_compile_options(crypto_core PRIVATE /W4 /permissive-)
+    message(STATUS "Created static library 'crypto_core' with ${LIB_SOURCES} files")
 else()
-    target_compile_options(crypto_core PRIVATE -Wall -Wextra -pedantic -Werror)
+    message(WARNING "No library source files found!")
+endif()
+
+# Создаем исполняемые файлы из main файлов
+foreach(main_src ${MAIN_SOURCES})
+    get_filename_component(EXE_NAME ${main_src} NAME_WE)
+
+    add_executable(${EXE_NAME} ${main_src})
+
+    # Include директории для исполняемого файла
+    target_include_directories(${EXE_NAME} PRIVATE
+            ${CMAKE_SOURCE_DIR}/Lab1/include
+            ${CMAKE_SOURCE_DIR}/Lab1/include/CipherModes
+            ${CMAKE_SOURCE_DIR}/Lab1/include/DEAL
+            ${CMAKE_SOURCE_DIR}/Lab1/include/DES
+            ${CMAKE_SOURCE_DIR}/Lab1/include/Interfaces
+            ${CMAKE_SOURCE_DIR}/Lab1/include/PaddingModes
+            ${CMAKE_SOURCE_DIR}/Lab1/include/RSA
+    )
+
+    # Линкуем с библиотекой (если она создана)
+    if(TARGET crypto_core)
+        target_link_libraries(${EXE_NAME} PRIVATE crypto_core)
+    else()
+        # Если библиотеки нет, линкуем напрямую с GMP
+        target_link_libraries(${EXE_NAME} PRIVATE gmp gmpxx)
+    endif()
+
+    # Опции компиляции
+    target_compile_options(${EXE_NAME} PRIVATE
+            -Wall -Wextra -pedantic -Werror
+    )
+
+    message(STATUS "Created executable: ${EXE_NAME}")
+endforeach()
+
+# Если нет main файлов, создаем один по умолчанию
+if(NOT MAIN_SOURCES AND TARGET crypto_core)
+    message(STATUS "No main files found, creating default executable...")
+
+    add_executable(crypto_lab_default ${CMAKE_BINARY_DIR}/default_main.cpp)
+
+    file(WRITE ${CMAKE_BINARY_DIR}/default_main.cpp
+            "#include <iostream>\n#include <gmp.h>\n#include \"DES/DES.h\"\n\nint main() {\n    std::cout << \"Crypto Labs Project\" << std::endl;\n    std::cout << \"GMP version: \" << gmp_version << std::endl;\n    std::cout << \"Build successful!\" << std::endl;\n    return 0;\n}")
+
+    target_include_directories(crypto_lab_default PRIVATE
+            ${CMAKE_SOURCE_DIR}/Lab1/include
+            ${CMAKE_SOURCE_DIR}/Lab1/include/CipherModes
+            ${CMAKE_SOURCE_DIR}/Lab1/include/DEAL
+            ${CMAKE_SOURCE_DIR}/Lab1/include/DES
+            ${CMAKE_SOURCE_DIR}/Lab1/include/Interfaces
+            ${CMAKE_SOURCE_DIR}/Lab1/include/PaddingModes
+            ${CMAKE_SOURCE_DIR}/Lab1/include/RSA
+    )
+
+    if(TARGET crypto_core)
+        target_link_libraries(crypto_lab_default PRIVATE crypto_core)
+    else()
+        target_link_libraries(crypto_lab_default PRIVATE gmp gmpxx)
+    endif()
+
+    message(STATUS "Created default executable: crypto_lab_default")
 endif()
