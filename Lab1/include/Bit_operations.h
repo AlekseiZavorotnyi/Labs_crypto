@@ -4,8 +4,8 @@
 #include <stdexcept>
 
 enum class ByteOrder {
-    BIG_ENDIAN,
-    LITTLE_ENDIAN
+    BIG_END,
+    LITTLE_END
 };
 
 enum class StartIndex {

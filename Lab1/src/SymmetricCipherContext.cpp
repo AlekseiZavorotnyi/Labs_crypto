@@ -67,7 +67,7 @@ SymmetricCipherContext::SymmetricCipherContext(
         const uint8_t* initialization_vector,
         size_t iv_len,
         const std::vector<std::any>& additionalParams
-) : byte_order(ByteOrder::BIG_ENDIAN) {
+) : byte_order(ByteOrder::BIG_END) {
     processAdditionalParams(additionalParams);
     switch (algorithm) {
         case CipherAlgorithm::DES:

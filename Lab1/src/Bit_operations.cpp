@@ -1,7 +1,7 @@
 #include "Bit_operations.h"
 
 void P_block(const uint8_t* input, size_t input_len, const int* perm_table, size_t table_size,
-             uint8_t* output, ByteOrder order = ByteOrder::BIG_ENDIAN, StartIndex start = StartIndex::ZERO) {
+             uint8_t* output, ByteOrder order = ByteOrder::BIG_END, StartIndex start = StartIndex::ZERO) {
 
     size_t out_bytes = table_size / 8;
 
@@ -22,7 +22,7 @@ void P_block(const uint8_t* input, size_t input_len, const int* perm_table, size
             size_t src_byte = src_bit_idx / 8;
             size_t src_bit = src_bit_idx % 8;
 
-            if (order == ByteOrder::LITTLE_ENDIAN) {
+            if (order == ByteOrder::LITTLE_END) {
                 src_byte = (input_len - 1) - src_byte;
             }
 

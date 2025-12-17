@@ -13,7 +13,7 @@ private:
     Feistel_network feistel;
 
 public:
-    explicit DEAL(size_t key_size = 16, ByteOrder byte_order = ByteOrder::BIG_ENDIAN);
+    explicit DEAL(size_t key_size = 16, ByteOrder byte_order = ByteOrder::BIG_END);
 
     void encrypt(const uint8_t* input, uint8_t* output) override;
     void decrypt(const uint8_t* input, uint8_t* output) override;

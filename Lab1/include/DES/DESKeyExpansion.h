@@ -7,7 +7,7 @@ private:
     ByteOrder byte_order;
 
 public:
-    explicit DESKeyExpansion(ByteOrder order = ByteOrder::BIG_ENDIAN);
+    explicit DESKeyExpansion(ByteOrder order = ByteOrder::BIG_END);
 
     void key_extension(const uint8_t* input_key, size_t key_len, uint8_t* round_keys, size_t rounds) override;
 };

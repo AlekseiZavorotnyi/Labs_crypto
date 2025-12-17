@@ -11,7 +11,7 @@ private:
     Feistel_network feistel;
 
 public:
-    explicit DES(ByteOrder byte_order = ByteOrder::BIG_ENDIAN);
+    explicit DES(ByteOrder byte_order = ByteOrder::BIG_END);
 
     void encrypt(const uint8_t* input, uint8_t* output) override;
     void decrypt(const uint8_t* input, uint8_t* output) override;

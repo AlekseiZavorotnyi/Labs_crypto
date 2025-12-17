@@ -9,7 +9,7 @@ void DESRound::applyE(const uint8_t* inputBlock, uint8_t* output) {
             15, 16, 17, 18, 19, 20, 19, 20, 21, 22, 23, 24,
             23, 24, 25, 26, 27, 28, 27, 28, 29, 30, 31,  0
     };
-    P_block(inputBlock, 4, E, 48, output, ByteOrder::BIG_ENDIAN, StartIndex::ZERO);
+    P_block(inputBlock, 4, E, 48, output, ByteOrder::BIG_END, StartIndex::ZERO);
 }
 
 void DESRound::applySboxes(const uint8_t* input48, uint8_t* output32) {

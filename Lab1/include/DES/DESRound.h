@@ -7,7 +7,7 @@ private:
     ByteOrder byte_order;
 
 public:
-    explicit DESRound(ByteOrder order = ByteOrder::BIG_ENDIAN);
+    explicit DESRound(ByteOrder order = ByteOrder::BIG_END);
 
     void encryptRound(const uint8_t* inputBlock, const uint8_t* roundKey, uint8_t* output) override;
 
