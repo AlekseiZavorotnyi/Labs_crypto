@@ -6,7 +6,7 @@
 #include "../include/AES/AES_Funcs.h"
 
 
-AES::AES(size_t block_len, size_t key_len, uint8_t* init_key_ptr) : key_len(key_len), block_len(block_len) {
+AES::AES(size_t block_len, size_t key_len, const uint8_t* init_key_ptr) : key_len(key_len), block_len(block_len) {
     init_key = new uint8_t[key_len]();
     memcpy(init_key, init_key_ptr, key_len);
 

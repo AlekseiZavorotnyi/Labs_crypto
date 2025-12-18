@@ -13,10 +13,11 @@
 #include <any>
 #include "DES/DES.h"
 #include "DEAL/DEAL.h"
+#include "AES/AES.h"
 
 enum class CipherMode { ECB, CBC, PCBC, CFB, OFB, CTR, RANDOM_DELTA };
 enum class PaddingMode { ZEROS, ANSI_X923, PKCS7, ISO_10126 };
-enum class CipherAlgorithm { DES, DEAL };
+enum class CipherAlgorithm { DES, DEAL, AES };
 
 class SymmetricCipherContext {
 private:
@@ -40,6 +41,7 @@ public:
             CipherAlgorithm algorithm,
             CipherMode c_mode,
             PaddingMode p_mode,
+            size_t block_size,
             const uint8_t* key,
             size_t key_len,
             const uint8_t* initialization_vector = nullptr,

@@ -62,6 +62,7 @@ SymmetricCipherContext::SymmetricCipherContext(
         CipherAlgorithm algorithm,
         CipherMode c_mode,
         PaddingMode p_mode,
+        size_t block_len,
         const uint8_t* key,
         size_t key_len,
         const uint8_t* initialization_vector,
@@ -75,8 +76,12 @@ SymmetricCipherContext::SymmetricCipherContext(
             key_size = 8;
             break;
         case CipherAlgorithm::DEAL:
-            key_size = key_len; // DEAL принимает длину ключа по факту
+            key_size = key_len;
             cipher = std::make_unique<DEAL>(key_size, byte_order);
+            break;
+        case CipherAlgorithm::AES:
+            key_size = key_len;
+            cipher = std::make_unique<AES>(block_len, key_size, key);
             break;
         default:
             throw std::invalid_argument("Unsupported cipher algorithm");
@@ -90,7 +95,7 @@ SymmetricCipherContext::SymmetricCipherContext(
     mode = createCipherMode(c_mode);
     padding = createPadding(p_mode);
 
-    block_size = cipher->blockSize();
+    block_size = block_len;
 
     if (requiresIV(c_mode)) {
         iv = std::make_unique<uint8_t[]>(block_size);

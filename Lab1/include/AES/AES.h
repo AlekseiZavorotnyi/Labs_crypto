@@ -15,7 +15,7 @@ public:
     uint8_t S_box[256] = {};
     uint8_t S_box_inv[256] = {};
 
-    AES(size_t block_len, size_t key_len, uint8_t* init_key);
+    AES(size_t block_len, size_t key_len, const uint8_t* init_key);
 
     ~AES();
 
