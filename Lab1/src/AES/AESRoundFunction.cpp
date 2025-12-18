@@ -1,0 +1,6 @@
+#ifndef LABS_CRYPTO_AESROUNDFUNCTION_H
+#define LABS_CRYPTO_AESROUNDFUNCTION_H
+
+#include "../../include/AES/AESRoundFunction.h"
+
+#endif //LABS_CRYPTO_AESROUNDFUNCTION_H
