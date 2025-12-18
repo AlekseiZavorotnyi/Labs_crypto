@@ -11,19 +11,15 @@ void AES_Funcs::shift_rows(uint8_t* state, size_t byte_len, bool inverted) {
     const int Nb = static_cast<int>(byte_len / 4); // 4/6/8
     uint8_t tmp[32] = {0};
 
-    // копируем как есть
     for (int i = 0; i < static_cast<int>(byte_len); ++i) tmp[i] = state[i];
 
-    // row 0 не сдвигается
     for (int r = 1; r < 4; ++r) {
         const int shift = r % Nb;
         for (int c = 0; c < Nb; ++c) {
             int src_c;
             if (!inverted) {
-                // encrypt: влево
                 src_c = (c + shift) % Nb;
             } else {
-                // decrypt: вправо
                 src_c = (c - shift + Nb) % Nb;
             }
             state[r * Nb + c] = tmp[r * Nb + src_c];

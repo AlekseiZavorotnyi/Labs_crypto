@@ -56,16 +56,13 @@ void AES::encrypt(const uint8_t* input, uint8_t* output) {
     uint8_t state[32] = {0};
     std::memcpy(state, input, block_len);
 
-    // Определяем количество раундов
     size_t rounds = 0;
     if (key_len == 16) rounds = 10;
     else if (key_len == 24) rounds = 12;
     else if (key_len == 32) rounds = 14;
 
-    // Начальный AddRoundKey
     AES_Funcs::add_round_key(state, block_len, exp_key);
 
-    // Основные раунды
     for (size_t i = 0; i < rounds; ++i) {
         AES_Funcs::sub_bytes(state, block_len, S_box);
         AES_Funcs::shift_rows(state, block_len, false);

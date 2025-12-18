@@ -1,10 +1,7 @@
 #ifndef LABS_CRYPTO_RSA_SERVICE_H
 #define LABS_CRYPTO_RSA_SERVICE_H
-#ifndef CRYPATURA_RSA_SERVICE_H
-#define CRYPATURA_RSA_SERVICE_H
 
 #include <gmpxx.h>
-#include "PrimeTest.h"
 
 class RSA_Service {
 public:
@@ -39,9 +36,7 @@ public:
         PrimalityTest p_test;
         size_t bit_len;
         double p_min;
-
-        std::pair<mpz_class, mpz_class> generate_primes(PrimeTest* test) const;
-        };
+    };
 
     RSA_Service(KeyGenerator::PrimalityTest test, double min_prime_probability, size_t bit_length);
 
@@ -53,10 +48,13 @@ public:
 
     mpz_class decrypt(const mpz_class &cipher) const;
 
+    void rsa_encrypt_file(const std::string& in_path, const std::string& out_path) const;
+
+    void rsa_decrypt_file(const std::string& in_path, const std::string& out_path) const;
+
 private:
     PrivateKey private_key;
     KeyGenerator keys_generator;
 };
 
-#endif //CRYPATURA_RSA_SERVICE_H
 #endif //LABS_CRYPTO_RSA_SERVICE_H

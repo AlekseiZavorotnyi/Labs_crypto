@@ -9,15 +9,11 @@ int PrimeTest::calculate_iter_cnt(double p_min) const {
 
 bool PrimeTest::isPrime(const mpz_class &n, double p_min) {
     int iter_cnt = this->calculate_iter_cnt(p_min);
-    //std::cout << "Iters: " << iter_cnt << std::endl;
 
     for (int i = 0; i < iter_cnt; ++i) {
-        //std::cout << "Iteration: " << i << std::endl;
         if (!this->test_iteration(n)) {
-            //std::cout << "Got false\n";
             return false;
         }
-        //std::cout << "Got true\n";
     }
     return true;
 }

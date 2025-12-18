@@ -79,6 +79,10 @@ SymmetricCipherContext::SymmetricCipherContext(
             key_size = key_len;
             cipher = std::make_unique<DEAL>(key_size, byte_order);
             break;
+        case CipherAlgorithm::TripleDES:
+            key_size = key_len;
+            cipher = std::make_unique<TripleDES>(key_size, byte_order);
+            break;
         case CipherAlgorithm::AES:
             key_size = key_len;
             cipher = std::make_unique<AES>(block_len, key_size, key);

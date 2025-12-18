@@ -5,7 +5,6 @@
 #include <vector>
 #include "./CipherModes/ECBMode.h"
 
-// EBCMode implementation
 void ECBMode::processBlocks(uint8_t* data, size_t& length,
                             ISymmetricCipher* cipher,
                             [[maybe_unused]]const uint8_t* iv,

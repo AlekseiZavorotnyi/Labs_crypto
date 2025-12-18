@@ -37,8 +37,8 @@ SymmetricCipherContext create_cipher(){
     uint8_t key_DEAL[16] = {10, 23, 54, 3, 124, 43, 76, 255, 10, 23, 54, 3, 124, 43, 76, 255};
     const uint8_t iv_DEAL[16] = {1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8};
 
-    uint8_t key_DEAL_24[24] = {10, 23, 54, 3, 124, 43, 76, 255, 10, 23, 54, 3, 124, 43, 76, 255, 10, 23, 54, 3, 124, 43, 76, 255};
-    const uint8_t iv_DEAL_24[24] = {1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8};
+    uint8_t key_DEAL_3DES_24[24] = {10, 23, 54, 3, 124, 43, 76, 255, 10, 23, 54, 3, 124, 43, 76, 255, 10, 23, 54, 3, 124, 43, 76, 255};
+    const uint8_t iv_DEAL_3DES_24[24] = {1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8};
 
     uint8_t key_DES[8] = {10, 23, 54, 3, 124, 43, 76, 255};
     const uint8_t iv_DES[8] = {1, 2, 3, 4, 5, 6, 7, 8};
@@ -48,25 +48,34 @@ SymmetricCipherContext create_cipher(){
             CipherAlgorithm::DES,
             CipherMode::CBC,
             PaddingMode::PKCS7,
-            key_DES, 8, iv_DES, 8, std::vector<std::any> {std::any(7)}
+            8, key_DES, 8, iv_DES, 8, std::vector<std::any> {std::any(7)}
     );
 
     SymmetricCipherContext ctx_DEAL(
             CipherAlgorithm::DEAL,
             CipherMode::CBC,
             PaddingMode::PKCS7,
-            key_DEAL, 16, iv_DEAL, 16
+            16, key_DEAL, 16, iv_DEAL, 16
     );
 
     SymmetricCipherContext ctx_DEAL_24(
             CipherAlgorithm::DEAL,
             CipherMode::CBC,
             PaddingMode::PKCS7,
-            key_DEAL_24, 24, iv_DEAL_24, 24
+            24, key_DEAL_3DES_24, 24, iv_DEAL_3DES_24, 24
     );
-    return ctx_DES;
+
+    SymmetricCipherContext ctx_3DES(
+            CipherAlgorithm::TripleDES,
+            CipherMode::CBC,
+            PaddingMode::PKCS7,
+            8, key_DEAL_3DES_24, 24, iv_DES, 8
+    );
+    return ctx_3DES;
 }
 
 int main(){
+    auto TrDES = create_cipher();
+    test1(TrDES);
     return 0;
 }

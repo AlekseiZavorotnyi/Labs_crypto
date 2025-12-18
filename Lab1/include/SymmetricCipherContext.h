@@ -14,10 +14,11 @@
 #include "DES/DES.h"
 #include "DEAL/DEAL.h"
 #include "AES/AES.h"
+#include "TripleDES.h"
 
 enum class CipherMode { ECB, CBC, PCBC, CFB, OFB, CTR, RANDOM_DELTA };
 enum class PaddingMode { ZEROS, ANSI_X923, PKCS7, ISO_10126 };
-enum class CipherAlgorithm { DES, DEAL, AES };
+enum class CipherAlgorithm { DES, DEAL, TripleDES, AES };
 
 class SymmetricCipherContext {
 private:
